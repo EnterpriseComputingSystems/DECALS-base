@@ -1,0 +1,6 @@
+[package]
+name = "DECALS-base"
+version = "0.1.0"
+authors = ["Francesco Macagno <fjmacagno1@yahoo.com>"]
+
+[dependencies]
