@@ -24,7 +24,7 @@ impl Network {
         net
     }
 
-    pub fn get_reachable_devices(&self) ->u32 {
+    pub fn get_num_devices(&self) ->u32 {
         self.num_devices
     }
 
