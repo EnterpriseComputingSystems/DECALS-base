@@ -2,13 +2,21 @@
 use std::thread;
 use std::io::{Error};
 use std::net::{TcpListener, TcpStream, SocketAddr};
+use std::collections::HashMap;
+use std::string::String;
 
-pub struct Network {connected: bool, num_devices: u32}
+mod protocol;
+
+pub struct Network {
+    num_devices: u32,
+    data: HashMap<String, i32>,
+    interests: &[String]
+}
 
 impl Network {
 
-    pub fn new()-> Network {
-        Network{connected: true, num_devices: 300}
+    pub fn new(interests: &[String])-> Network {
+        Network{num_devices: 0, interests: interests, data: HashMap::new()}
     }
 
     pub fn get_reachable_devices(&self) ->u32 {
