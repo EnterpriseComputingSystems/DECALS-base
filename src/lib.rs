@@ -16,7 +16,10 @@ pub struct Network {
 impl Network {
 
     pub fn new(interests: &[String])-> Network {
-        Network{num_devices: 0, interests: interests, data: HashMap::new()}
+        let net: Network = Network{num_devices: 0, interests: interests, data: HashMap::new()};
+
+        net.start_server();
+        net.broadcast_info();
     }
 
     pub fn get_reachable_devices(&self) ->u32 {
@@ -40,6 +43,10 @@ impl Network {
                 self.handle_incoming(listener.accept());
             }
         });
+    }
+
+    fn broadcast_info(&self) {
+
     }
 
 
