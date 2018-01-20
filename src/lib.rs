@@ -1,9 +1,14 @@
 
-use std::thread;
-use std::io::{Error};
-use std::net::{TcpListener, TcpStream, SocketAddr};
+extern crate futures;
+extern crate tokio_core;
+extern crate tokio_io;
+
+use futures::{Future, Stream};
+use tokio_io::{io, AsyncRead};
+use tokio_core::net::TcpListener;
+use tokio_core::reactor::Core;
+
 use std::collections::HashMap;
-use std::string::String;
 
 mod protocol;
 
@@ -21,23 +26,20 @@ impl Network {
         net.start_server();
         net.broadcast_info();
 
-        net
+        return net;
     }
 
     pub fn get_num_devices(&self) ->u32 {
         self.num_devices
     }
 
-    fn handle_incoming(&self, res: Result<(TcpStream, SocketAddr), Error>) {
-        match res {
-            Ok((stream, addr)) => println!("new client: {:?}", addr),
-            Err(e) => println!("couldn't get client: {:?}", e),
-        }
-    }
-
     pub fn start_server(&self) {
 
-        let listener = TcpListener::bind("127.0.0.1:80").unwrap();
+        let mut core = Core::new().unwrap();
+        let handle = core.handle();
+        let addr = "127.0.0.1:0".parse().unwrap();
+
+        let listener = TcpListener::bind(&addr, &handle).unwrap();
 
 
     }
