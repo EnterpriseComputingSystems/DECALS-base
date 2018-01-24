@@ -30,14 +30,14 @@ pub fn parse_hello(message: &String)->MsgData {
     assert!(is_hello(&msg));
 
     //Remove header
-    msg = msg.split_off(7);
+    msg = msg.split_off(6);
 
     //Get port
     let div = msg.find(' ').unwrap();
     let mut intrstr = msg.split_off(div);
 
     //Remove " ["
-    intrstr = msg.split_off(2);
+    intrstr = intrstr.split_off(2);
 
     //Remove "]"
     intrstr.pop();
@@ -60,4 +60,38 @@ pub fn is_broadcast(msg: &String)->bool {
 
 pub fn parse_broadcast(msg: &String)->MsgData {
     return parse_hello(msg);
+}
+
+
+
+#[cfg(test)]
+mod protocol_tests {
+
+    use super::*;
+
+    #[test]
+    fn test_broadcast_prot() {
+        let mut interests: Vec<String> = Vec::new();
+        interests.push("Test".to_string());
+
+        match parse_broadcast(&get_broadcast((1234), &interests)) {
+            MsgData::HELLO(p, i)=> {
+                assert_eq!(p, 1234);
+                assert_eq!(interests, i);},
+            _ => panic!()
+        }
+    }
+
+    #[test]
+    fn test_hello_prot() {
+        let mut interests: Vec<String> = Vec::new();
+        interests.push("Test".to_string());
+
+        match parse_hello(&get_hello((1234), &interests)) {
+            MsgData::HELLO(p, i)=> {
+                assert_eq!(p, 1234);
+                assert_eq!(interests, i);},
+            _ => panic!()
+        }
+    }
 }
