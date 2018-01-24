@@ -23,9 +23,32 @@ pub struct Network {
 impl Network {
 
     pub fn new(interests: Vec<String>)-> Network {
-        let net: Network = Network{num_devices: 0, interests: interests, data: HashMap::new(), broadcastSock: ()};
 
-        net.start_server();
+        let mut core = Core::new().unwrap();
+        let handle = core.handle();
+
+        let udpaddr = "127.0.0.1:52300".parse().unwrap();
+        let tcpaddr = "127.0.0.1:0".parse().unwrap();
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        //UDP
+        let broadcastSock: UdpSocket = match UdpSocket::bind(&udpaddr, &handle) {
+            Ok(sock) => sock,
+            Err(error) => {panic!("Couldn't listen for udp");}
+        };
+
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // TCP
+        let listener = match TcpListener::bind(&tcpaddr, &handle) {
+            Ok(lst) => lst,
+            Err(error) => panic!("Couldn't listen for TCP!")
+        };
+
+        let net: Network = Network{num_devices: 0, interests: interests, data: HashMap::new(), broadcastSock: broadcastSock};
+
+
+
         net.broadcast_info();
 
         return net;
@@ -33,17 +56,6 @@ impl Network {
 
     pub fn get_num_devices(&self) ->u32 {
         self.num_devices
-    }
-
-    pub fn start_server(&self) {
-
-        let mut core = Core::new().unwrap();
-        let handle = core.handle();
-        let addr = "127.0.0.1:0".parse().unwrap();
-
-        let listener = TcpListener::bind(&addr, &handle).unwrap();
-
-
     }
 
     fn broadcast_info(&self) {
