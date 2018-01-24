@@ -1,26 +1,21 @@
 
 
-mod protocol {
 
+pub fn get_hello(port: u16, interests: &Vec<String>)->String {
 
-    pub fn get_hello(ip: &str, port: u16, mac: &str, interests: Vec<String>)->String {
+    let mut output: String = format!("HELLO {} [", port);
 
-        let mut output: String = format!("HELLO {}:{} {} [", ip, port, mac);
+    let first = true;
+    for inter in interests.iter().clone() {
 
-        let first = true;
-        for inter in interests.iter().clone() {
+        if !first { output = output + ","; }
 
-            if !first { output = output + ","; }
-
-            output = output + inter;
-        }
-
-        return output;
+        output = output + inter;
     }
 
-    pub fn get_broadcast(ip: &str, port: u16, mac: &str, interests: Vec<String>)->String {
-        return get_hello(ip, port, mac, interests);
-    }
+    return output + "]";
+}
 
-
+pub fn get_broadcast(port: u16, interests: &Vec<String>)->String {
+    return get_hello(port, interests);
 }
