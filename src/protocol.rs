@@ -4,6 +4,20 @@ pub enum MsgData {
     INVALID(String)
 }
 
+//Get data from an unknown incoming message.
+pub fn parse_message(message: &String)->MsgData {
+
+    if is_broadcast(&message) {
+        return parse_broadcast(&message);
+    }
+
+    if is_hello(&message) {
+        return parse_hello(&message);
+    }
+
+    return MsgData::INVALID(format!("Unknown message type: {}", message));
+}
+
 pub fn get_hello(port: u16, interests: &Vec<String>)->String {
 
     let mut output: String = format!("HELLO {} [", port);
@@ -63,6 +77,9 @@ pub fn parse_broadcast(msg: &String)->MsgData {
 }
 
 
+
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// TESTS
 
 #[cfg(test)]
 mod protocol_tests {
