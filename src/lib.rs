@@ -1,24 +1,29 @@
 
 extern crate futures;
-extern crate tokio_core;
 extern crate tokio_io;
+#[macro_use]
+extern crate tokio_core;
 
-use futures::{Future, Stream};
-use tokio_io::{io, AsyncRead};
+use futures::{Future, Stream, Poll};
+use tokio_io::{AsyncRead};
 use tokio_core::net::{TcpListener, UdpSocket};
 use tokio_core::reactor::Core;
 
 use std::collections::HashMap;
+use std::{env, io};
 
 mod protocol;
+
+pub struct UDPServ<'a> {
+    net: &'a Network
+}
 
 pub struct Network {
     num_devices: u32,
     data: HashMap<String, i32>,
     interests: Vec<String>,
     broadcast_sock: UdpSocket,
-    port: u16,
-    tcp_listener: Option<TcpListener>
+    port: u16
 }
 
 impl Network {
@@ -54,23 +59,28 @@ impl Network {
             interests: interests,
             data: HashMap::new(),
             broadcast_sock: broadcast_sock,
-            port: tcp_listener.local_addr().unwrap().port(),
-            tcp_listener: Some(tcp_listener)
+            port: tcp_listener.local_addr().unwrap().port()
         };
 
-        net.start();
+
+        {
+            let net = &mut net;
+
+            let serv = tcp_listener.incoming().for_each(|(sk, peer)|{
+                println!("ASDASD {}", net.port);
+                Ok(())
+            });
+
+            core.run(serv).unwrap();
+
+            let usrv = UDPServ{net: net};
+
+            core.run(usrv).unwrap();
+        }
+
+        net.broadcast_info();
 
         return net;
-    }
-
-    fn start(&mut self) {
-
-        let tcp_listener = std::mem::replace(&mut self.tcp_listener, None).unwrap();
-
-        let x = tcp_listener.incoming().for_each(|(sk, peer)|{
-            println!("ASDASD {}", self.port);
-            Ok(())
-        });
     }
 
     pub fn get_num_devices(&self) ->u32 {
@@ -86,4 +96,18 @@ impl Network {
     }
 
 
+}
+
+impl<'a> Future for UDPServ<'a> {
+    type Item = ();
+    type Error = io::Error;
+
+    fn poll(&mut self) -> Poll<(), io::Error> {
+        let mut buf = vec![0; 1024];
+        loop {
+            let input = try_nb!(self.net.broadcast_sock.recv_from(&mut buf));
+
+            print!("UDP received {:?}", input);
+        }
+    }
 }
