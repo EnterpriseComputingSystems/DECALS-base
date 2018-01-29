@@ -9,8 +9,7 @@ use tokio_core::net::{TcpListener, UdpSocket};
 use tokio_core::reactor::Core;
 
 use std::collections::HashMap;
-use std::{io};
-use std::thread;
+use std::{io, thread, time};
 use std::sync::RwLock;
 use std::borrow::Borrow;
 use std::sync::Arc;
@@ -46,6 +45,18 @@ impl Network {
 
         Network::start_tcp_serv(bx.clone());
         Network::start_udp_serv(bx.clone());
+
+        loop {
+            let lcktmp: &RwLock<Network> = bx.borrow();
+            let guard = lcktmp.read().unwrap();
+            if let Some(_) = (*guard).broadcast_sock {
+                if (*guard).port != 0 {
+                    break;
+                }
+            }
+
+            thread::sleep(time::Duration::from_millis(300));
+        }
 
         {
             let lcktmp: &RwLock<Network> = bx.borrow();
@@ -142,10 +153,15 @@ impl Network {
     fn broadcast_info(&self) {
         let addr = "255.255.255.255:52300".parse().unwrap();
 
-        match self.broadcast_sock.unwrap().send_to(protocol::get_broadcast(self.port, &self.interests).as_bytes(), &addr) {
-            Ok(_) => return,
-            Err(error) => println!("Error broadcasting {}", error)
-        };
+
+        if let &Some(ref udpsock) = &self.broadcast_sock {
+            match udpsock.send_to(protocol::get_broadcast(self.port, &self.interests).as_bytes(), &addr) {
+                Ok(_) => return,
+                Err(error) => println!("Error broadcasting {}", error)
+            };
+        } else {
+            panic!("UDP not initialized! cannot broadcast before initialization is finished");
+        }
     }
 
 
@@ -162,7 +178,11 @@ impl Future for UDPServ {
             {
                 let lcktmp: &RwLock<Network> = self.net.borrow();
                 let guard = lcktmp.read().unwrap();
-                input = try_nb!((*guard).broadcast_sock.unwrap().recv_from(&mut buf));
+                if let &Some(ref udpsock) = &(*guard).broadcast_sock {
+                    input = try_nb!(udpsock.recv_from(&mut buf));
+                } else {
+                    panic!("UDP not initialized! This should not be reachable");
+                }
             }
 
 
