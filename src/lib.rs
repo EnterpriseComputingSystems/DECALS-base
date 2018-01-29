@@ -10,9 +10,8 @@ use tokio_core::reactor::Core;
 
 use std::collections::HashMap;
 use std::{io, thread, time};
-use std::sync::RwLock;
+use std::sync::{RwLock, Arc};
 use std::borrow::Borrow;
-use std::sync::Arc;
 
 mod protocol;
 
@@ -25,8 +24,7 @@ pub struct Network {
     data: HashMap<String, i32>,
     interests: Vec<String>,
     broadcast_sock: Option<UdpSocket>,
-    port: u16,
-    servers_started: bool
+    port: u16
 }
 
 impl Network {
@@ -37,8 +35,7 @@ impl Network {
             interests: interests,
             data: HashMap::new(),
             broadcast_sock: None,
-            port: 0,
-            servers_started: false
+            port: 0
         };
 
         let bx: Arc<RwLock<Network>> = Arc::new(RwLock::new(net));
@@ -47,6 +44,9 @@ impl Network {
         Network::start_udp_serv(bx.clone());
 
         loop {
+
+            println!("Waiting for servers to start....");
+
             let lcktmp: &RwLock<Network> = bx.borrow();
             let guard = lcktmp.read().unwrap();
             if let Some(_) = (*guard).broadcast_sock {
@@ -55,7 +55,7 @@ impl Network {
                 }
             }
 
-            thread::sleep(time::Duration::from_millis(300));
+            thread::sleep(time::Duration::from_millis(500));
         }
 
         {
@@ -89,7 +89,6 @@ impl Network {
 
 
             let port = tcp_listener.local_addr().unwrap().port();
-            println!("TCP Server running on port {}", port);
 
             {
                 let lcktmp: &RwLock<Network> = net.borrow();
@@ -107,6 +106,7 @@ impl Network {
                 Ok(())
             });
 
+            println!("TCP Server running on port {}", port);
 
             core.run(serv).unwrap();
         });
@@ -140,6 +140,8 @@ impl Network {
             }
 
             let usrv = UDPServ{net: net};
+
+            println!("UDP Server running on port 52300");
 
             core.run(usrv).unwrap();
         });
