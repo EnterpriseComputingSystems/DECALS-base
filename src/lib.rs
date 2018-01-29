@@ -5,19 +5,20 @@ extern crate tokio_io;
 extern crate tokio_core;
 
 use futures::{Future, Stream, Poll};
-use tokio_io::{AsyncRead};
 use tokio_core::net::{TcpListener, UdpSocket};
 use tokio_core::reactor::Core;
 
 use std::collections::HashMap;
 use std::{io};
 use std::thread;
-use std::sync::Mutex;
+use std::sync::RwLock;
+use std::borrow::Borrow;
+use std::sync::Arc;
 
 mod protocol;
 
-pub struct UDPServ<'a> {
-    net: &'a Network
+pub struct UDPServ {
+    net: Arc<RwLock<Network>>
 }
 
 pub struct Network {
@@ -31,13 +32,9 @@ pub struct Network {
 
 impl Network {
 
-    pub fn new(interests: Vec<String>)-> Network {
+    pub fn new(interests: Vec<String>)-> Arc<RwLock<Network>> {
 
-
-
-
-
-        let mut net: Network = Network{num_devices: 0,
+        let net: Network = Network{num_devices: 0,
             interests: interests,
             data: HashMap::new(),
             broadcast_sock: None,
@@ -45,23 +42,29 @@ impl Network {
             servers_started: false
         };
 
+        let bx: Arc<RwLock<Network>> = Arc::new(RwLock::new(net));
 
+        Network::start_tcp_serv(bx.clone());
+        Network::start_udp_serv(bx.clone());
 
-
-        net.broadcast_info();
+        {
+            let lcktmp: &RwLock<Network> = bx.borrow();
+            let guard = lcktmp.read().unwrap();
+            (*guard).broadcast_info();
+        }
 
         println!("Servers Started");
 
-        return net;
+        return bx;
     }
 
     //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     // TCP
-    fn start_tcp_serv(network: &mut Network) {
+    fn start_tcp_serv(network: Arc<RwLock<Network>>) {
 
         thread::spawn(|| {
 
-            let mut net = &network;
+            let net: Arc<RwLock<Network>> = network;
 
             let mut core = Core::new().unwrap();
             let handle = core.handle();
@@ -74,11 +77,22 @@ impl Network {
             };
 
 
-            net.port = tcp_listener.local_addr().unwrap().port();
-            println!("TCP Server running on port {}", net.port);
+            let port = tcp_listener.local_addr().unwrap().port();
+            println!("TCP Server running on port {}", port);
+
+            {
+                let lcktmp: &RwLock<Network> = net.borrow();
+                let mut guard = lcktmp.write().unwrap();
+                (*guard).port = port;
+            }
 
             let serv = tcp_listener.incoming().for_each(|(sk, peer)|{
-                println!("ASDASD {}", net.port);
+                {
+                    let lcktmp: &RwLock<Network> = net.borrow();
+                    let guard = lcktmp.read().unwrap();
+                    println!("ASDASD {}", (*guard).port);
+                }
+
                 Ok(())
             });
 
@@ -90,9 +104,12 @@ impl Network {
 
     //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     //UDP
-    fn start_udp_serv(net: &mut Network) {
+    fn start_udp_serv(network: Arc<RwLock<Network>>) {
 
         thread::spawn(|| {
+
+            let net: Arc<RwLock<Network>> = network;
+
             let mut core = Core::new().unwrap();
             let handle = core.handle();
 
@@ -105,6 +122,11 @@ impl Network {
 
             broadcast_sock.set_broadcast(true).unwrap();
 
+            {
+                let lcktmp: &RwLock<Network> = net.borrow();
+                let mut guard = lcktmp.write().unwrap();
+                (*guard).broadcast_sock = Some(broadcast_sock);
+            }
 
             let usrv = UDPServ{net: net};
 
@@ -119,6 +141,7 @@ impl Network {
 
     fn broadcast_info(&self) {
         let addr = "255.255.255.255:52300".parse().unwrap();
+
         match self.broadcast_sock.unwrap().send_to(protocol::get_broadcast(self.port, &self.interests).as_bytes(), &addr) {
             Ok(_) => return,
             Err(error) => println!("Error broadcasting {}", error)
@@ -128,16 +151,22 @@ impl Network {
 
 }
 
-impl<'a> Future for UDPServ<'a> {
+impl Future for UDPServ {
     type Item = ();
     type Error = io::Error;
 
     fn poll(&mut self) -> Poll<(), io::Error> {
         let mut buf = vec![0; 1024];
         loop {
-            let input = try_nb!(self.net.broadcast_sock.recv_from(&mut buf));
+            let input;
+            {
+                let lcktmp: &RwLock<Network> = self.net.borrow();
+                let guard = lcktmp.read().unwrap();
+                input = try_nb!((*guard).broadcast_sock.unwrap().recv_from(&mut buf));
+            }
 
-            print!("UDP received {:?}", input);
+
+            print!("UDP received {:?} {:?}", buf, input);
         }
     }
 }
