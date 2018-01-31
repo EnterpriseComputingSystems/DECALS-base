@@ -73,7 +73,7 @@ impl Network {
     // TCP
     fn start_tcp_serv(network: Arc<RwLock<Network>>) {
 
-        thread::spawn(|| {
+        thread::Builder::new().name("tcp_serv".to_string()).spawn(|| {
 
             let net: Arc<RwLock<Network>> = network;
 
@@ -109,7 +109,7 @@ impl Network {
             println!("TCP Server running on port {}", port);
 
             core.run(serv).unwrap();
-        });
+        }).unwrap();
 
     }
 
@@ -117,7 +117,7 @@ impl Network {
     //UDP
     fn start_udp_serv(network: Arc<RwLock<Network>>) {
 
-        thread::spawn(|| {
+        thread::Builder::new().name("udp_serv".to_string()).spawn(|| {
 
             let net: Arc<RwLock<Network>> = network;
 
@@ -144,7 +144,7 @@ impl Network {
             println!("UDP Server running on port 52300");
 
             core.run(usrv).unwrap();
-        });
+        }).unwrap();
     }
 
 
