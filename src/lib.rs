@@ -15,6 +15,8 @@ use std::borrow::Borrow;
 
 mod protocol;
 
+const BROADCAST_PORT: u16 = 5320;
+
 pub struct UDPServ {
     net: Arc<RwLock<Network>>
 }
@@ -124,7 +126,7 @@ impl Network {
             let mut core = Core::new().unwrap();
             let handle = core.handle();
 
-            let udpaddr = "127.0.0.1:5320".parse().unwrap();
+            let udpaddr = format!("127.0.0.1:{}", BROADCAST_PORT).parse().unwrap();
 
             let broadcast_sock: UdpSocket = match UdpSocket::bind(&udpaddr, &handle) {
                 Ok(sock) => sock,
@@ -141,7 +143,7 @@ impl Network {
 
             let usrv = UDPServ{net: net};
 
-            println!("UDP Server running on port 52300");
+            println!("UDP Server running on port {}", BROADCAST_PORT);
 
             core.run(usrv).unwrap();
         }).unwrap();
@@ -153,7 +155,7 @@ impl Network {
     }
 
     fn broadcast_info(&self) {
-        let addr = "255.255.255.255:5320".parse().unwrap();
+        let addr = format!("255.255.255.255:{}", BROADCAST_PORT).parse().unwrap();
 
 
         if let &Some(ref udpsock) = &self.broadcast_sock {
