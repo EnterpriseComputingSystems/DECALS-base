@@ -124,7 +124,7 @@ impl Network {
             let mut core = Core::new().unwrap();
             let handle = core.handle();
 
-            let udpaddr = "127.0.0.1:52300".parse().unwrap();
+            let udpaddr = "127.0.0.1:5320".parse().unwrap();
 
             let broadcast_sock: UdpSocket = match UdpSocket::bind(&udpaddr, &handle) {
                 Ok(sock) => sock,
@@ -153,7 +153,7 @@ impl Network {
     }
 
     fn broadcast_info(&self) {
-        let addr = "255.255.255.255:52300".parse().unwrap();
+        let addr = "255.255.255.255:5320".parse().unwrap();
 
 
         if let &Some(ref udpsock) = &self.broadcast_sock {
