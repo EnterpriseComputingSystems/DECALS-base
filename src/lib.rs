@@ -64,11 +64,7 @@ impl Network {
 
         thread::sleep(time::Duration::from_millis(1000));
 
-        {
-            let lcktmp: &RwLock<Network> = bx.borrow();
-            let guard = lcktmp.read().unwrap();
-            (*guard).broadcast_info();
-        }
+        Network::start_heartbeat(bx.clone());
 
         println!("Servers Started");
 
@@ -161,6 +157,23 @@ impl Network {
             println!("UDP Server running on port {}", BROADCAST_PORT);
 
             core.run(usrv).unwrap();
+        }).unwrap();
+    }
+
+    fn start_heartbeat(network: Arc<RwLock<Network>>) {
+
+        thread::Builder::new().name("udp_serv".to_string()).spawn(|| {
+
+            let net: Arc<RwLock<Network>> = network;
+
+            loop {
+                let lcktmp: &RwLock<Network> = net.borrow();
+                let guard = lcktmp.read().unwrap();
+                (*guard).broadcast_info();
+
+                thread::sleep(time::Duration::from_millis(3000));
+            }
+
         }).unwrap();
     }
 
