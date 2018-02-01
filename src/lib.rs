@@ -3,6 +3,7 @@ extern crate futures;
 extern crate tokio_io;
 #[macro_use]
 extern crate tokio_core;
+extern crate net2;
 
 use futures::{Future, Stream, Poll};
 use tokio_core::net::{TcpListener, UdpSocket};
@@ -12,6 +13,9 @@ use std::collections::HashMap;
 use std::{io, thread, time};
 use std::sync::{RwLock, Arc};
 use std::borrow::Borrow;
+use std::net::{SocketAddr};
+
+use net2::UdpBuilder;
 
 mod protocol;
 
@@ -122,15 +126,26 @@ impl Network {
         thread::Builder::new().name("udp_serv".to_string()).spawn(|| {
 
             let net: Arc<RwLock<Network>> = network;
+            let udpaddr = SocketAddr::from(([127, 0, 0, 1], BROADCAST_PORT));
+
+            //Build socket
+            let builder: UdpBuilder = UdpBuilder::new_v4().unwrap();
+
+            #[cfg(unix)]
+            builder.reuse_port(true).unwrap();
+
+            let stdsock: std::net::UdpSocket = match builder.bind(&udpaddr) {
+                Ok(sock) => sock,
+                Err(error) => panic!("Couldn't listen for UDP! {}", error)
+            };
 
             let mut core = Core::new().unwrap();
             let handle = core.handle();
 
-            let udpaddr = format!("127.0.0.1:{}", BROADCAST_PORT).parse().unwrap();
 
-            let broadcast_sock: UdpSocket = match UdpSocket::bind(&udpaddr, &handle) {
+            let broadcast_sock: UdpSocket = match UdpSocket::from_socket(stdsock, &handle) {
                 Ok(sock) => sock,
-                Err(error) => panic!("Couldn't listen for UDP! {}", error)
+                Err(error) => panic!("Couldn't convert UDP socket! {}", error)
             };
 
             broadcast_sock.set_broadcast(true).unwrap();
