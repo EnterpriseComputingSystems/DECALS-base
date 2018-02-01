@@ -44,9 +44,7 @@ impl Network {
         Network::start_udp_serv(bx.clone());
 
         loop {
-
             println!("Waiting for servers to start....");
-
             let lcktmp: &RwLock<Network> = bx.borrow();
             let guard = lcktmp.read().unwrap();
             if let Some(_) = (*guard).broadcast_sock {
@@ -55,8 +53,10 @@ impl Network {
                 }
             }
 
-            thread::sleep(time::Duration::from_millis(500));
+            thread::sleep(time::Duration::from_millis(512));
         }
+
+        thread::sleep(time::Duration::from_millis(1000));
 
         {
             let lcktmp: &RwLock<Network> = bx.borrow();
@@ -157,6 +157,7 @@ impl Network {
 
 
         if let &Some(ref udpsock) = &self.broadcast_sock {
+            println!("Broadcasting to {} : {:?}", addr, protocol::get_broadcast(self.port, &self.interests));
             match udpsock.send_to(protocol::get_broadcast(self.port, &self.interests).as_bytes(), &addr) {
                 Ok(_) => return,
                 Err(error) => println!("Error broadcasting {}", error)
@@ -174,7 +175,7 @@ impl Future for UDPServ {
     type Error = io::Error;
 
     fn poll(&mut self) -> Poll<(), io::Error> {
-        let mut buf = vec![0; 1024];
+        let mut buf = vec![0; 256];
         loop {
             let input;
             {
@@ -188,7 +189,7 @@ impl Future for UDPServ {
             }
 
 
-            print!("UDP received {:?} {:?}", buf, input);
+            println!("UDP received {:?} {:?}", buf, input);
         }
     }
 }
