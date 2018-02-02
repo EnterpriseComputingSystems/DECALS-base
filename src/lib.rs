@@ -14,6 +14,7 @@ use std::{io, thread, time};
 use std::sync::{RwLock, Arc};
 use std::borrow::Borrow;
 use std::net::{SocketAddr};
+use std::iter::FromIterator;
 
 use net2::UdpBuilder;
 
@@ -205,8 +206,8 @@ impl Future for UDPServ {
     type Error = io::Error;
 
     fn poll(&mut self) -> Poll<(), io::Error> {
-        let mut buf = vec![0; 256];
         loop {
+            let mut buf = vec![0; 1024];
             let input;
             {
                 let lcktmp: &RwLock<Network> = self.net.borrow();
@@ -218,8 +219,21 @@ impl Future for UDPServ {
                 }
             }
 
+            let msg: String = match String::from_utf8(buf) {
+                Ok(s) => s,
+                Err(e) =>{
+                    println!("Received invalid UTF: {}", e);
+                    continue;
+                }
+            };
 
-            println!("UDP received {:?} {:?}", buf, input);
+            println!("UDP received from {:?} : {}", input, msg);
+
+            if protocol::is_hello(&msg) {
+                protocol::parse_hello(&msg);
+            }
+
+
         }
     }
 }
