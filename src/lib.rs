@@ -219,10 +219,12 @@ impl Future for UDPServ {
                 }
             }
 
-            let msg: String = match String::from_utf8(buf) {
-                Ok(s) => s,
+            let msg: String;
+
+            match String::from_utf8(buf) {
+                Ok(s) => msg = s.trim().to_string(),
                 Err(e) =>{
-                    println!("Received invalid UTF: {}", e);
+                    println!("UDP Broadcast: Received invalid UTF: {}", e);
                     continue;
                 }
             };
