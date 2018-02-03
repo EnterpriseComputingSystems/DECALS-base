@@ -241,7 +241,7 @@ impl Future for UDPServ {
                 }
             };
 
-            print!("UDP received from {:?} : {} ->", input, msg);
+            print!("UDP received from {:?} : {} -> ", input, msg);
 
             if protocol::is_broadcast(&msg) {
                 match protocol::parse_broadcast(&msg) {
@@ -250,6 +250,29 @@ impl Future for UDPServ {
                     },
                     MsgData::HELLO(deviceid, port, interests)=> {
 
+                        let exists;
+                        {
+                            let lcktmp: &RwLock<Network> = self.net.borrow();
+                            let guard = lcktmp.read().unwrap();
+                            exists = (*guard).devices.contains_key(&deviceid);
+                        }
+
+                        if exists {
+                            println!("device already known");
+                        } else {
+
+                            let newdev = Device::new(deviceid, SocketAddr::new(input.1.ip(), port), interests);
+
+                            {
+                                let lcktmp: &RwLock<Network> = self.net.borrow();
+                                let mut guard = lcktmp.write().unwrap();
+                                (*guard).devices.insert(deviceid, newdev);
+                            }
+
+                            println!("device with id {} added", deviceid);
+
+
+                        }
                     }
                 }
             } else {
