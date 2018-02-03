@@ -4,21 +4,29 @@ extern crate tokio_io;
 #[macro_use]
 extern crate tokio_core;
 extern crate net2;
+extern crate rand;
 
 use futures::{Future, Stream, Poll};
+
 use tokio_core::net::{TcpListener, UdpSocket};
 use tokio_core::reactor::Core;
+
+use net2::UdpBuilder;
 
 use std::collections::HashMap;
 use std::{io, thread, time};
 use std::sync::{RwLock, Arc};
 use std::borrow::Borrow;
 use std::net::{SocketAddr};
-use std::iter::FromIterator;
 
-use net2::UdpBuilder;
-
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+//Local modules
 mod protocol;
+mod device;
+
+use protocol::MsgData;
+
+use device::Device;
 
 const BROADCAST_PORT: u16 = 5320;
 
@@ -29,8 +37,10 @@ pub struct UDPServ {
 pub struct Network {
     num_devices: u32,
     data: HashMap<String, i32>,
+    devices: HashMap<u64, Device>,
     interests: Vec<String>,
     broadcast_sock: Option<UdpSocket>,
+    deviceid: u64,
     port: u16
 }
 
@@ -41,7 +51,9 @@ impl Network {
         let net: Network = Network{num_devices: 0,
             interests: interests,
             data: HashMap::new(),
+            devices: HashMap::new(),
             broadcast_sock: None,
+            deviceid: rand::random::<u64>(),
             port: 0
         };
 
@@ -188,8 +200,8 @@ impl Network {
 
 
         if let &Some(ref udpsock) = &self.broadcast_sock {
-            println!("Broadcasting to {} : {:?}", addr, protocol::get_broadcast(self.port, &self.interests));
-            match udpsock.send_to(protocol::get_broadcast(self.port, &self.interests).as_bytes(), &addr) {
+            println!("Broadcasting....");
+            match udpsock.send_to(protocol::get_broadcast(self.deviceid, self.port, &self.interests).as_bytes(), &addr) {
                 Ok(_) => return,
                 Err(error) => println!("Error broadcasting {}", error)
             };
@@ -229,10 +241,19 @@ impl Future for UDPServ {
                 }
             };
 
-            println!("UDP received from {:?} : {}", input, msg);
+            print!("UDP received from {:?} : {} ->", input, msg);
 
-            if protocol::is_hello(&msg) {
-                protocol::parse_hello(&msg);
+            if protocol::is_broadcast(&msg) {
+                match protocol::parse_broadcast(&msg) {
+                    MsgData::INVALID(er)=> {
+                        println!("Error parsing hello - {}", er);
+                    },
+                    MsgData::HELLO(deviceid, port, interests)=> {
+
+                    }
+                }
+            } else {
+                println!("Unrecognized message type");
             }
 
 
