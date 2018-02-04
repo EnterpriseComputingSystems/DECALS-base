@@ -8,7 +8,7 @@ extern crate rand;
 
 use futures::{Future, Stream, Poll};
 
-use tokio_core::net::{TcpListener, UdpSocket};
+use tokio_core::net::{TcpListener, UdpSocket, TcpStream};
 use tokio_core::reactor::Core;
 
 use net2::UdpBuilder;
@@ -112,11 +112,8 @@ impl Network {
             }
 
             let serv = tcp_listener.incoming().for_each(|(sk, peer)|{
-                {
-                    let lcktmp: &RwLock<Network> = net.borrow();
-                    let guard = lcktmp.read().unwrap();
-                    println!("ASDASD {}", (*guard).port);
-                }
+
+                let _ = handle_tcp_connection(&net, sk, peer);
 
                 Ok(())
             });
@@ -282,4 +279,11 @@ impl Future for UDPServ {
 
         }
     }
+}
+
+
+fn handle_tcp_connection(network: &Arc<RwLock<Network>>, sock: TcpStream, addr: SocketAddr)->Result<(), String> {
+
+
+    return Ok(());
 }
