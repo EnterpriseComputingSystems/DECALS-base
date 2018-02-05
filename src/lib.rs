@@ -13,6 +13,9 @@ use tokio_core::reactor::Core;
 
 use net2::UdpBuilder;
 
+#[cfg(unix)]
+use net2::unix::UnixUdpBuilderExt;
+
 use std::collections::HashMap;
 use std::{io, thread, time};
 use std::sync::{RwLock, Arc};
