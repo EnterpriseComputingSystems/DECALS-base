@@ -128,26 +128,10 @@ impl Network {
             let net: Arc<Network> = network;
             loop {
                 let mut buf = vec![0; 1024];
-                let input;
-                {
-                    let nettmp: &Network = net.borrow();
-                    match nettmp.broadcast_sock.recv_from(&mut buf) {
-                        Ok(inp)=>input = inp,
-                        Err(e)=>{
-                            println!("Error receiving UDP: {}", e);
-                            continue;
-                        }
-                    }
+                match net.broadcast_sock.recv_from(&mut buf) {
+                    Ok((size, addr))=>handle_udp_message(&net, buf, size, addr),
+                    Err(e)=>println!("Error receiving UDP: {}", e)
                 }
-
-                match String::from_utf8(buf) {
-                    Ok(s) => handle_udp_message(&net, s.trim().to_string(), input.1),
-                    Err(e) =>{
-                        println!("UDP Broadcast: Received invalid UTF: {}", e);
-                        continue;
-                    }
-                };
-
             }
         }).unwrap();
     }
@@ -185,7 +169,15 @@ impl Network {
 
 }
 
-fn handle_udp_message(net: &Arc<Network>, msg: String, addr: SocketAddr) {
+fn handle_udp_message(net: &Arc<Network>, buf: Vec<u8>, size: usize, addr: SocketAddr) {
+
+    let msg = match String::from_utf8(buf) {
+        Ok(s) => s[..size].trim().to_string(),
+        Err(e) =>{
+            println!("UDP Broadcast: Received invalid UTF: {}", e);
+            return;
+        }
+    };
 
     print!("UDP received from {:?} : {} -> ", addr, msg);
 
