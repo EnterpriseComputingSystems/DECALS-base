@@ -100,8 +100,6 @@ impl Network {
     // TCP
     fn start_tcp_serv(tcp_listener: TcpListener, network: Arc<Network>) {
 
-
-
         thread::Builder::new().name("tcp_serv".to_string()).spawn(move || {
 
             let net: Arc<Network> = network;
@@ -116,7 +114,7 @@ impl Network {
                     Err(e)=>println!("Connection from unknown host failed {}", e)
                 }
             }
-        }).unwrap();
+        }).expect("Error starting tcp listener thread");
     }
 
     //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -133,7 +131,7 @@ impl Network {
                     Err(e)=>println!("Error receiving UDP: {}", e)
                 }
             }
-        }).unwrap();
+        }).expect("Error starting udp listener thread");
     }
 
     fn start_heartbeat(network: Arc<Network>) {
@@ -147,7 +145,7 @@ impl Network {
                 thread::sleep(time::Duration::from_millis(HEARTBEAT_DELAY));
             }
 
-        }).unwrap();
+        }).expect("Error starting heartbeat thread");
     }
 
 
