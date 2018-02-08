@@ -113,7 +113,7 @@ impl Network {
                             let net = netclone;
                             handle_tcp_connection(&net, sock, addr)});
                     },
-                    Err(e)=>println!("Connection from unknown host failed")
+                    Err(e)=>println!("Connection from unknown host failed {}", e)
                 }
             }
         }).unwrap();
