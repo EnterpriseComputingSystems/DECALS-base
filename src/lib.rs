@@ -138,7 +138,7 @@ impl Network {
 
     fn start_heartbeat(network: Arc<Network>) {
 
-        thread::Builder::new().name("udp_serv".to_string()).spawn(|| {
+        thread::Builder::new().name("decals_heartbeat".to_string()).spawn(|| {
 
             let net: Arc<Network> = network;
 
