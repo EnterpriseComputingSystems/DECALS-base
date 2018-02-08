@@ -26,7 +26,6 @@ const BROADCAST_PORT: u16 = 5320;
 const HEARTBEAT_DELAY: u64 = 3000;
 
 pub struct Network {
-    num_devices: u32,
     data: RwLock<HashMap<String, String>>,
     devices: RwLock<HashMap<u64, Device>>,
     interests: Vec<String>,
@@ -73,7 +72,7 @@ impl Network {
 
 
 
-        let new_net: Network = Network{num_devices: 0,
+        let new_net: Network = Network{
             interests: interests,
             data: RwLock::new(HashMap::new()),
             devices: RwLock::new(HashMap::new()),
@@ -168,8 +167,9 @@ impl Network {
     }
 
 
-    pub fn get_num_devices(&self) ->u32 {
-        self.num_devices
+    pub fn get_num_devices(&self) ->usize {
+        let guard = self.devices.read().unwrap();
+        return (*guard).len();
     }
 
     fn broadcast_info(&self) {
