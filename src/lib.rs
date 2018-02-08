@@ -10,7 +10,6 @@ use net2::unix::UnixUdpBuilderExt;
 use std::collections::HashMap;
 use std::{io, thread, time};
 use std::sync::{RwLock, Arc};
-use std::borrow::Borrow;
 use std::net::{SocketAddr, UdpSocket, TcpListener, TcpStream};
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -186,24 +185,29 @@ fn handle_udp_message(net: &Arc<Network>, buf: Vec<u8>, size: usize, addr: Socke
             },
             MsgData::HELLO(deviceid, port, interests)=> {
 
-                let exists;
-                {
-                    let guard = net.devices.read().unwrap();
-                    exists = (*guard).contains_key(&deviceid);
-                }
-
-                if exists {
-                    println!("device already known");
+                if deviceid == net.deviceid {
+                    println!("this device");
                 } else {
 
-                    let newdev = Device::new(deviceid, SocketAddr::new(addr.ip(), port), interests);
-
+                    let exists;
                     {
-                        let mut guard = net.devices.write().unwrap();
-                        (*guard).insert(deviceid, newdev);
+                        let guard = net.devices.read().unwrap();
+                        exists = (*guard).contains_key(&deviceid);
                     }
 
-                    println!("device with id {} added", deviceid);
+                    if exists {
+                        println!("device already known");
+                    } else {
+
+                        let newdev = Device::new(deviceid, SocketAddr::new(addr.ip(), port), interests);
+
+                        {
+                            let mut guard = net.devices.write().unwrap();
+                            (*guard).insert(deviceid, newdev);
+                        }
+
+                        println!("device with id {} added", deviceid);
+                    }
                 }
             }
         }
