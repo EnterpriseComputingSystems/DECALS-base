@@ -1,6 +1,6 @@
 
 pub enum MsgData {
-    HELLO(u16, Vec<String>),
+    HELLO(u64, u16, Vec<String>),
     INVALID(String)
 }
 
@@ -18,9 +18,9 @@ pub fn parse_message(message: &String)->MsgData {
     return MsgData::INVALID(format!("Unknown message type: {}", message));
 }
 
-pub fn get_hello(port: u16, interests: &Vec<String>)->String {
+pub fn get_hello(deviceid: u64, port: u16, interests: &Vec<String>)->String {
 
-    let mut output: String = format!("HELLO {} [", port);
+    let mut output: String = format!("HELLO {} {} [", deviceid, port);
 
     let first = true;
     for inter in interests.iter().clone() {
@@ -46,26 +46,45 @@ pub fn parse_hello(message: &String)->MsgData {
     //Remove header
     msg = msg.split_off(6);
 
-    //Get port
-    let div = msg.find(' ').unwrap();
-    let mut intrstr = msg.split_off(div);
+    let mut parts = msg.split_whitespace();
 
-    //Remove " ["
-    intrstr = intrstr.split_off(2);
+    let port: u16;
+    let deviceid: u64;
 
-    //Remove "]"
-    intrstr.pop();
-
-    let port = match msg.parse() {
-        Ok(num)=> num,
-        Err(error)=> return MsgData::INVALID(format!("Thought HELLO, err={}", error))
+    //Get device id
+    match parts.next() {
+        Some(pt)=> deviceid = match pt.parse() {
+                    Ok(num)=> num,
+                    Err(error)=> return MsgData::INVALID(format!("Error parsing HELLO: {}", error))
+                },
+        None=>return MsgData::INVALID("Error parsing HELLO: Missing deviceid".to_string())
     };
 
-    return MsgData::HELLO(port, intrstr.split(',').map(|s| s.to_string()).collect());
+    //Get port
+    match parts.next() {
+        Some(pt)=> port = match pt.parse() {
+                    Ok(num)=> num,
+                    Err(error)=> return MsgData::INVALID(format!("Error parsing HELLO: {}", error))
+                },
+        None=>return MsgData::INVALID("Error parsing HELLO: Missing port".to_string())
+    };
+
+    let mut intrstr;
+
+    //Get interests
+    match parts.next() {
+        Some(pt)=> {
+            intrstr = pt.to_string().split_off(1); // Remove leading and tailing brackets
+            intrstr.pop();
+        },
+        None=>return MsgData::INVALID("Error parsing HELLO: Missing port".to_string())
+    };
+
+    return MsgData::HELLO(deviceid, port, intrstr.split(',').map(|s| s.to_string()).collect());
 }
 
-pub fn get_broadcast(port: u16, interests: &Vec<String>)->String {
-    return get_hello(port, interests);
+pub fn get_broadcast(deviceid: u64, port: u16, interests: &Vec<String>)->String {
+    return get_hello(deviceid, port, interests);
 }
 
 pub fn is_broadcast(msg: &String)->bool {
@@ -91,11 +110,12 @@ mod protocol_tests {
         let mut interests: Vec<String> = Vec::new();
         interests.push("Test".to_string());
 
-        match parse_broadcast(&get_broadcast((1234), &interests)) {
-            MsgData::HELLO(p, i)=> {
+        match parse_broadcast(&get_broadcast(1234567890, 1234, &interests)) {
+            MsgData::HELLO(did, p, i)=> {
+                assert_eq!(did, 1234567890);
                 assert_eq!(p, 1234);
                 assert_eq!(interests, i);},
-            _ => panic!()
+            MsgData::INVALID(err)=> panic!(err)
         }
     }
 
@@ -104,11 +124,12 @@ mod protocol_tests {
         let mut interests: Vec<String> = Vec::new();
         interests.push("Test".to_string());
 
-        match parse_hello(&get_hello((1234), &interests)) {
-            MsgData::HELLO(p, i)=> {
+        match parse_hello(&get_hello(1234567890, 1234, &interests)) {
+            MsgData::HELLO(did, p, i)=> {
+                assert_eq!(did, 1234567890);
                 assert_eq!(p, 1234);
                 assert_eq!(interests, i);},
-            _ => panic!()
+            MsgData::INVALID(err) => panic!(MsgData::INVALID(err))
         }
     }
 }

@@ -7,3 +7,5 @@ authors = ["Francesco Macagno <fjmacagno1@yahoo.com>", "Carly Robison <carlyelle
 tokio-core = "0.1"
 tokio-io = "0.1"
 futures = "0.1"
+net2 = "0.2"
+rand = "0.4"
