@@ -6,10 +6,10 @@ extern crate tokio_core;
 extern crate net2;
 extern crate rand;
 
-use futures::{Future, Stream, Poll};
+// use futures::{Future, Stream, Poll};
 
-use tokio_core::net::{TcpListener, UdpSocket, TcpStream};
-use tokio_core::reactor::Core;
+// use tokio_core::net::{TcpListener, UdpSocket, TcpStream};
+// use tokio_core::reactor::Core;
 
 use net2::UdpBuilder;
 
@@ -20,7 +20,7 @@ use std::collections::HashMap;
 use std::{io, thread, time};
 use std::sync::{RwLock, Arc};
 use std::borrow::Borrow;
-use std::net::{SocketAddr};
+use std::net::{SocketAddr, UdpSocket, TcpListener, TcpStream};
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 //Local modules
@@ -32,10 +32,6 @@ use protocol::MsgData;
 use device::Device;
 
 const BROADCAST_PORT: u16 = 5320;
-
-pub struct UDPServ {
-    net: Arc<RwLock<Network>>
-}
 
 pub struct Network {
     num_devices: u32,
@@ -65,21 +61,6 @@ impl Network {
         Network::start_tcp_serv(bx.clone());
         Network::start_udp_serv(bx.clone());
 
-        loop {
-            println!("Waiting for servers to start....");
-            let lcktmp: &RwLock<Network> = bx.borrow();
-            let guard = lcktmp.read().unwrap();
-            if let Some(_) = (*guard).broadcast_sock {
-                if (*guard).port != 0 {
-                    break;
-                }
-            }
-
-            thread::sleep(time::Duration::from_millis(512));
-        }
-
-        thread::sleep(time::Duration::from_millis(1000));
-
         Network::start_heartbeat(bx.clone());
 
         println!("Servers Started");
@@ -91,86 +72,98 @@ impl Network {
     // TCP
     fn start_tcp_serv(network: Arc<RwLock<Network>>) {
 
-        thread::Builder::new().name("tcp_serv".to_string()).spawn(|| {
 
-            let net: Arc<RwLock<Network>> = network;
+        let net: Arc<RwLock<Network>> = network;
 
-            let mut core = Core::new().unwrap();
-            let handle = core.handle();
+        let tcpaddr: SocketAddr = "127.0.0.1:0".parse().unwrap();
 
-            let tcpaddr = "127.0.0.1:0".parse().unwrap();
-
-            let tcp_listener = match TcpListener::bind(&tcpaddr, &handle) {
-                Ok(lst) => lst,
-                Err(error) => panic!("Couldn't listen for TCP! {}", error)
-            };
+        let tcp_listener = match TcpListener::bind(&tcpaddr) {
+            Ok(lst) => lst,
+            Err(error) => panic!("Couldn't listen for TCP! {}", error)
+        };
 
 
-            let port = tcp_listener.local_addr().unwrap().port();
+        let port = tcp_listener.local_addr().unwrap().port();
 
-            {
-                let lcktmp: &RwLock<Network> = net.borrow();
-                let mut guard = lcktmp.write().unwrap();
-                (*guard).port = port;
+        {
+            let lcktmp: &RwLock<Network> = net.borrow();
+            let mut guard = lcktmp.write().unwrap();
+            (*guard).port = port;
+        }
+
+        thread::Builder::new().name("tcp_serv".to_string()).spawn(move || {
+
+            loop {
+                match tcp_listener.accept() {
+                    Ok((sock, addr))=>{
+                        thread::spawn(move || {handle_tcp_connection(&net.clone(), sock, addr)});
+                    },
+                    Err(e)=>println!("Connection from unknown host failed")
+                }
             }
-
-            let serv = tcp_listener.incoming().for_each(|(sk, peer)|{
-
-                let _ = handle_tcp_connection(&net, sk, peer);
-
-                Ok(())
-            });
-
-            println!("TCP Server running on port {}", port);
-
-            core.run(serv).unwrap();
         }).unwrap();
 
+        println!("TCP Server running on port {}", port);
     }
 
     //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     //UDP
     fn start_udp_serv(network: Arc<RwLock<Network>>) {
+        let udpaddr: SocketAddr = SocketAddr::from(([127, 0, 0, 1], BROADCAST_PORT));
+
+        //Build socket
+        let builder: UdpBuilder = UdpBuilder::new_v4().unwrap();
+
+        #[cfg(unix)]
+        builder.reuse_port(true).unwrap();
+
+        let broadcast_sock: UdpSocket = match builder.bind(&udpaddr) {
+            Ok(sock) => sock,
+            Err(error) => panic!("Couldn't listen for UDP! {}", error)
+        };
+
+        broadcast_sock.set_broadcast(true).unwrap();
+
+        {
+            let lcktmp: &RwLock<Network> = network.borrow();
+            let mut guard = lcktmp.write().unwrap();
+            (*guard).broadcast_sock = Some(broadcast_sock);
+        }
 
         thread::Builder::new().name("udp_serv".to_string()).spawn(|| {
 
             let net: Arc<RwLock<Network>> = network;
-            let udpaddr = SocketAddr::from(([127, 0, 0, 1], BROADCAST_PORT));
+            loop {
+                let mut buf = vec![0; 1024];
+                let input;
+                {
+                    let lcktmp: &RwLock<Network> = net.borrow();
+                    let guard = lcktmp.read().unwrap();
+                    if let &Some(ref udpsock) = &(*guard).broadcast_sock {
+                        match udpsock.recv_from(&mut buf) {
+                            Ok(inp)=>input = inp,
+                            Err(e)=>{
+                                println!("Error receiving UDP: {}", e);
+                                continue;
+                            }
+                        }
+                    } else {
+                        panic!("UDP not initialized! This should not be reachable");
+                    }
+                }
 
-            //Build socket
-            let builder: UdpBuilder = UdpBuilder::new_v4().unwrap();
+                match String::from_utf8(buf) {
+                    Ok(s) => handle_udp_message(&net, s.trim().to_string(), input.1),
+                    Err(e) =>{
+                        println!("UDP Broadcast: Received invalid UTF: {}", e);
+                        continue;
+                    }
+                };
 
-            #[cfg(unix)]
-            builder.reuse_port(true).unwrap();
-
-            let stdsock: std::net::UdpSocket = match builder.bind(&udpaddr) {
-                Ok(sock) => sock,
-                Err(error) => panic!("Couldn't listen for UDP! {}", error)
-            };
-
-            let mut core = Core::new().unwrap();
-            let handle = core.handle();
-
-
-            let broadcast_sock: UdpSocket = match UdpSocket::from_socket(stdsock, &handle) {
-                Ok(sock) => sock,
-                Err(error) => panic!("Couldn't convert UDP socket! {}", error)
-            };
-
-            broadcast_sock.set_broadcast(true).unwrap();
-
-            {
-                let lcktmp: &RwLock<Network> = net.borrow();
-                let mut guard = lcktmp.write().unwrap();
-                (*guard).broadcast_sock = Some(broadcast_sock);
             }
-
-            let usrv = UDPServ{net: net};
-
-            println!("UDP Server running on port {}", BROADCAST_PORT);
-
-            core.run(usrv).unwrap();
         }).unwrap();
+
+        println!("UDP Server running on port {}", BROADCAST_PORT);
     }
 
     fn start_heartbeat(network: Arc<RwLock<Network>>) {
@@ -196,7 +189,7 @@ impl Network {
     }
 
     fn broadcast_info(&self) {
-        let addr = format!("255.255.255.255:{}", BROADCAST_PORT).parse().unwrap();
+        let addr: SocketAddr = SocketAddr::from(([255, 255, 255, 255], BROADCAST_PORT));
 
 
         if let &Some(ref udpsock) = &self.broadcast_sock {
@@ -213,74 +206,44 @@ impl Network {
 
 }
 
-impl Future for UDPServ {
-    type Item = ();
-    type Error = io::Error;
+fn handle_udp_message(net: &Arc<RwLock<Network>>, msg: String, addr: SocketAddr) {
 
-    fn poll(&mut self) -> Poll<(), io::Error> {
-        loop {
-            let mut buf = vec![0; 1024];
-            let input;
-            {
-                let lcktmp: &RwLock<Network> = self.net.borrow();
-                let guard = lcktmp.read().unwrap();
-                if let &Some(ref udpsock) = &(*guard).broadcast_sock {
-                    input = try_nb!(udpsock.recv_from(&mut buf));
+    print!("UDP received from {:?} : {} -> ", addr, msg);
+
+    if protocol::is_broadcast(&msg) {
+        match protocol::parse_broadcast(&msg) {
+            MsgData::INVALID(er)=> {
+                println!("Error parsing hello - {}", er);
+            },
+            MsgData::HELLO(deviceid, port, interests)=> {
+
+                let exists;
+                {
+                    let lcktmp: &RwLock<Network> = net.borrow();
+                    let guard = lcktmp.read().unwrap();
+                    exists = (*guard).devices.contains_key(&deviceid);
+                }
+
+                if exists {
+                    println!("device already known");
                 } else {
-                    panic!("UDP not initialized! This should not be reachable");
-                }
-            }
 
-            let msg: String;
+                    let newdev = Device::new(deviceid, SocketAddr::new(addr.ip(), port), interests);
 
-            match String::from_utf8(buf) {
-                Ok(s) => msg = s.trim().to_string(),
-                Err(e) =>{
-                    println!("UDP Broadcast: Received invalid UTF: {}", e);
-                    continue;
-                }
-            };
-
-            print!("UDP received from {:?} : {} -> ", input, msg);
-
-            if protocol::is_broadcast(&msg) {
-                match protocol::parse_broadcast(&msg) {
-                    MsgData::INVALID(er)=> {
-                        println!("Error parsing hello - {}", er);
-                    },
-                    MsgData::HELLO(deviceid, port, interests)=> {
-
-                        let exists;
-                        {
-                            let lcktmp: &RwLock<Network> = self.net.borrow();
-                            let guard = lcktmp.read().unwrap();
-                            exists = (*guard).devices.contains_key(&deviceid);
-                        }
-
-                        if exists {
-                            println!("device already known");
-                        } else {
-
-                            let newdev = Device::new(deviceid, SocketAddr::new(input.1.ip(), port), interests);
-
-                            {
-                                let lcktmp: &RwLock<Network> = self.net.borrow();
-                                let mut guard = lcktmp.write().unwrap();
-                                (*guard).devices.insert(deviceid, newdev);
-                            }
-
-                            println!("device with id {} added", deviceid);
-
-
-                        }
+                    {
+                        let lcktmp: &RwLock<Network> = net.borrow();
+                        let mut guard = lcktmp.write().unwrap();
+                        (*guard).devices.insert(deviceid, newdev);
                     }
+
+                    println!("device with id {} added", deviceid);
+
+
                 }
-            } else {
-                println!("Unrecognized message type");
             }
-
-
         }
+    } else {
+        println!("Unrecognized message type");
     }
 }
 
