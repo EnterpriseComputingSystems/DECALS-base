@@ -1,23 +1,15 @@
+use time::Timespec;
+use time;
 
 pub enum MsgData {
     HELLO(u64, u16, Vec<String>),
+    DATA_SET(String, String, Timespec),
     INVALID(String)
 }
 
-//Get data from an unknown incoming message.
-pub fn parse_message(message: &String)->MsgData {
 
-    if is_broadcast(&message) {
-        return parse_broadcast(&message);
-    }
-
-    if is_hello(&message) {
-        return parse_hello(&message);
-    }
-
-    return MsgData::INVALID(format!("Unknown message type: {}", message));
-}
-
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+//HELLO
 pub fn get_hello(deviceid: u64, port: u16, interests: &Vec<String>)->String {
 
     let mut output: String = format!("HELLO {} {} [", deviceid, port);
@@ -83,6 +75,8 @@ pub fn parse_hello(message: &String)->MsgData {
     return MsgData::HELLO(deviceid, port, intrstr.split(',').map(|s| s.to_string()).collect());
 }
 
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+//BROADCAST
 pub fn get_broadcast(deviceid: u64, port: u16, interests: &Vec<String>)->String {
     return get_hello(deviceid, port, interests);
 }
@@ -97,13 +91,142 @@ pub fn parse_broadcast(msg: &String)->MsgData {
 
 
 
+
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+//DATA
+pub fn get_set_data(key: String, val: String, time: &Timespec)->String {
+    format!("DATA SET {} {} {}", key, val, encode_timespec(&time))
+}
+
+pub fn is_data(msg: &String)->bool {
+    return msg.starts_with("DATA ");
+}
+
+pub fn parse_data(message: &String)->MsgData {
+
+    let mut msg = message.clone();
+
+    assert!(is_data(&msg));
+
+    //Remove header
+    msg = msg.split_off(5);
+
+    let mut parts = msg.split_whitespace();
+
+    let key: String;
+    let value: String;
+    let time: Timespec;
+
+    let set: bool;
+
+    //Get action
+    match parts.next() {
+        Some(pt)=> {
+            if pt == "READ" {
+                set = false;
+            } else if pt == "SET" {
+                set = true;
+            } else {
+                return MsgData::INVALID("Error parsing DATA: Unknown action".to_string());
+            }
+        },
+        None=>return MsgData::INVALID("Error parsing DATA: Missing action".to_string())
+    };
+
+    //Get key
+    match parts.next() {
+        Some(pt)=> key = pt.to_string(),
+        None=>return MsgData::INVALID("Error parsing DATA: Missing key".to_string())
+    };
+
+    //Get value
+    match parts.next() {
+        Some(pt)=> value = pt.to_string(),
+        None=>return MsgData::INVALID("Error parsing DATA: Missing value".to_string())
+    };
+
+    //Get time
+    match parts.next() {
+        Some(pt)=> match decode_timespec(pt.to_string()) {
+            Ok(t)=>time=t,
+            Err(e)=>return MsgData::INVALID(format!("Error parsing DATA: time parse error -> {}", e))
+        },
+        None=>return MsgData::INVALID("Error parsing DATA: Missing value".to_string())
+    };
+
+    if set {
+        return MsgData::DATA_SET(key, value, time);
+    } else {
+        return MsgData::INVALID("Other data actions not supported yet".to_string());
+    }
+}
+
+
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-// TESTS
+// Helpers
+
+//Get data from an unknown incoming message.
+pub fn parse_message(message: &String)->MsgData {
+
+    if is_broadcast(&message) {
+        return parse_broadcast(&message);
+    }
+
+    if is_hello(&message) {
+        return parse_hello(&message);
+    }
+
+    if is_data(&message) {
+        return parse_data(&message);
+    }
+
+    return MsgData::INVALID(format!("Unknown message type: {}", message));
+}
+
+fn encode_timespec(ts: &Timespec)->String {
+    format!("{}:{}", ts.sec, ts.nsec)
+}
+
+fn decode_timespec(dat: String)->Result<Timespec, String> {
+
+    let mut split = dat.split(':');
+
+    let sec: i64;
+    let nano: i32;
+
+    match split.next() {
+        Some(s)=> match s.parse() {
+            Ok(n)=>sec=n,
+            Err(e)=>return Err(format!("couldn't parse seconds: {}", e))
+        },
+        None=>return Err("missing seconds".to_string())
+    }
+
+    match split.next() {
+        Some(s)=> match s.parse() {
+            Ok(n)=>nano=n,
+            Err(e)=>return Err(format!("couldn't parse nanoseconds: {}", e))
+        },
+        None=>return Err("missing nanoseconds".to_string())
+    }
+
+    return Ok(Timespec::new(sec, nano));
+}
+
+
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// Tests
 
 #[cfg(test)]
 mod protocol_tests {
 
     use super::*;
+
+    #[test]
+    fn test_timespec_encode() {
+        let tme = time::get_time();
+        assert_eq!(tme, decode_timespec(encode_timespec(&tme)).unwrap());
+    }
 
     #[test]
     fn test_broadcast_prot() {
@@ -115,7 +238,8 @@ mod protocol_tests {
                 assert_eq!(did, 1234567890);
                 assert_eq!(p, 1234);
                 assert_eq!(interests, i);},
-            MsgData::INVALID(err)=> panic!(err)
+            MsgData::INVALID(err)=> panic!(err),
+            _=>panic!("Wrong MsgData")
         }
     }
 
@@ -129,7 +253,22 @@ mod protocol_tests {
                 assert_eq!(did, 1234567890);
                 assert_eq!(p, 1234);
                 assert_eq!(interests, i);},
-            MsgData::INVALID(err) => panic!(MsgData::INVALID(err))
+            MsgData::INVALID(err) => panic!(err),
+            _=>panic!("Wrong MsgData")
+        }
+    }
+
+    #[test]
+    fn test_data_set_prot() {
+
+        let tme = time::get_time();
+        match parse_data(&get_set_data("key".to_string(), "value".to_string(), &tme)) {
+            MsgData::DATA_SET(k, v, t)=> {
+                assert_eq!(k, "key");
+                assert_eq!(v, "value");
+                assert_eq!(t, tme);},
+            MsgData::INVALID(err) => panic!(err),
+            _=>panic!("Wrong MsgData")
         }
     }
 }

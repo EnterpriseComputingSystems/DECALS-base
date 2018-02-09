@@ -1,6 +1,7 @@
 
 extern crate net2;
 extern crate rand;
+extern crate time;
 
 use net2::UdpBuilder;
 
@@ -8,7 +9,8 @@ use net2::UdpBuilder;
 use net2::unix::UnixUdpBuilderExt;
 
 use std::collections::HashMap;
-use std::{io, thread, time};
+use std::{io, thread};
+use std::time as stdtime;
 use std::sync::{RwLock, Arc};
 use std::net::{SocketAddr, UdpSocket, TcpListener, TcpStream};
 
@@ -141,7 +143,7 @@ impl Network {
 
             loop {
                 net.broadcast_info();
-                thread::sleep(time::Duration::from_millis(HEARTBEAT_DELAY));
+                thread::sleep(stdtime::Duration::from_millis(HEARTBEAT_DELAY));
             }
 
         }).expect("Error starting heartbeat thread");
@@ -209,7 +211,8 @@ fn handle_udp_message(net: &Arc<Network>, buf: Vec<u8>, size: usize, addr: Socke
                         println!("device with id {} added", deviceid);
                     }
                 }
-            }
+            },
+            _=>println!("Message not HELLO")
         }
     } else {
         println!("Unrecognized message type");
