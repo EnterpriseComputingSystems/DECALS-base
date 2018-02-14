@@ -9,25 +9,30 @@ use net2::UdpBuilder;
 use net2::unix::UnixUdpBuilderExt;
 
 use std::collections::HashMap;
-use std::{io, thread};
+use std::{thread};
 use std::time as stdtime;
 use std::sync::{RwLock, Arc};
 use std::net::{SocketAddr, UdpSocket, TcpListener, TcpStream};
+use std::io::BufReader;
+use std::io::BufRead;
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 //Local modules
 mod protocol;
 mod device;
+mod data;
 
 use protocol::MsgData;
 
 use device::Device;
 
+use data::DataPoint;
+
 const BROADCAST_PORT: u16 = 5320;
 const HEARTBEAT_DELAY: u64 = 3000;
 
 pub struct Network {
-    data: RwLock<HashMap<String, String>>,
+    data: RwLock<HashMap<String, DataPoint>>,
     devices: RwLock<HashMap<u64, Device>>,
     interests: Vec<String>,
     broadcast_sock: UdpSocket,
@@ -221,5 +226,30 @@ fn handle_udp_message(net: &Arc<Network>, buf: Vec<u8>, size: usize, addr: Socke
 
 
 fn handle_tcp_connection(network: &Arc<Network>, sock: TcpStream, addr: SocketAddr) {
+
+    let mut reader = BufReader::new(sock);
+
+    loop {
+        let mut buf = String::new();
+        match reader.read_line(&mut buf) {
+            Ok(size)=> {
+                match protocol::parse_data(&buf) {
+                    MsgData::DATA_SET(k, v, t)=>{
+
+                        {
+                            let mut guard = network.data.write().unwrap();
+                            data::update_data_point(&mut (*guard), k, v, t);
+                        }
+                    },
+                    MsgData::INVALID(e)=>println!("Error parsing incoming TCP message: {}", e),
+                    _=>println!("Unsupported incoming TCP message")
+                }
+            },
+            Err(e)=>{
+                println!("Error with incoming TCP connection: {}", e);
+                break;
+            }
+        }
+    }
 
 }
