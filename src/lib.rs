@@ -154,12 +154,6 @@ impl Network {
         }).expect("Error starting heartbeat thread");
     }
 
-    // Get the number of discovered devices
-    pub fn get_num_devices(&self) ->usize {
-        let guard = self.devices.read().unwrap();
-        return (*guard).len();
-    }
-
     fn broadcast_info(&self) {
         let addr: SocketAddr = SocketAddr::from(([255, 255, 255, 255], BROADCAST_PORT));
 
@@ -170,6 +164,19 @@ impl Network {
         };
     }
 
+    // Get the number of discovered devices
+    pub fn get_num_devices(&self) ->usize {
+        let guard = self.devices.read().unwrap();
+        return (*guard).len();
+    }
+
+    pub fn get_value(&self, key: &String)->String {
+        let guard = self.data.read().unwrap();
+        match (*guard).get(key.as_str()) {
+            Some(s)=>return s.get_value(),
+            None=>return String::new()
+        }
+    }
 
 }
 

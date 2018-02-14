@@ -10,6 +10,9 @@ pub struct DataPoint {
 
 impl DataPoint {
 
+    pub fn get_value(&self)->String {
+        return self.value.clone();
+    }
 
     pub fn check_set_value(&mut self, val: String, ts: Timespec) {
         if self.timestamp < ts {
