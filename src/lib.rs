@@ -154,7 +154,7 @@ impl Network {
         }).expect("Error starting heartbeat thread");
     }
 
-
+    // Get the number of discovered devices
     pub fn get_num_devices(&self) ->usize {
         let guard = self.devices.read().unwrap();
         return (*guard).len();
@@ -173,6 +173,11 @@ impl Network {
 
 }
 
+
+
+
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+//UDP handling
 fn handle_udp_message(net: &Arc<Network>, buf: Vec<u8>, size: usize, addr: SocketAddr) {
 
     let msg = match String::from_utf8(buf) {
@@ -224,7 +229,8 @@ fn handle_udp_message(net: &Arc<Network>, buf: Vec<u8>, size: usize, addr: Socke
     }
 }
 
-
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+//TCP handling
 fn handle_tcp_connection(network: &Arc<Network>, sock: TcpStream, addr: SocketAddr) {
 
     let mut reader = BufReader::new(sock);
@@ -240,6 +246,8 @@ fn handle_tcp_connection(network: &Arc<Network>, sock: TcpStream, addr: SocketAd
                             let mut guard = network.data.write().unwrap();
                             data::update_data_point(&mut (*guard), k, v, t);
                         }
+
+
                     },
                     MsgData::INVALID(e)=>println!("Error parsing incoming TCP message: {}", e),
                     _=>println!("Unsupported incoming TCP message")
