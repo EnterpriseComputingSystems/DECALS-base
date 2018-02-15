@@ -11,8 +11,12 @@ pub struct DataPoint {
 
 impl DataPoint {
 
-    pub fn new(key: String, value: String, ts: Timespec)->DataPoint {
-        DataPoint{key, value, timestamp: ts}
+    pub fn new(key: String, value: String, timestamp: Timespec)->DataPoint {
+        DataPoint{key, value, timestamp}
+    }
+
+    pub fn clone(&self)->DataPoint {
+        DataPoint::new(self.key.clone(), self.value.clone(), self.timestamp)
     }
 
     pub fn get_value(&self)->String {

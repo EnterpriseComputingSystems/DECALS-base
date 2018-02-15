@@ -1,6 +1,6 @@
 
 
-use std::net::{SocketAddr};
+use std::net::{SocketAddr, TcpStream};
 
 use data::DataPoint;
 
@@ -18,7 +18,7 @@ impl Device {
         return newdev;
     }
 
-    pub fn send_data(&self, dat: DataPoint) {
-
+    pub fn send_data(&self, dat: &DataPoint) {
+        let stream = TcpStream::connect(self.addr);
     }
 }

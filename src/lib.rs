@@ -184,13 +184,13 @@ impl Network {
 
         {
             let mut guard = self.data.write().unwrap();
-            data::update_data_point(&mut (*guard), datpt);
+            data::update_data_point(&mut (*guard), datpt.clone());
         }
 
         {
             let guard = self.devices.read().unwrap();
             for (_, device) in (*guard).iter() {
-
+                device.send_data(&datpt);
             }
         }
     }
