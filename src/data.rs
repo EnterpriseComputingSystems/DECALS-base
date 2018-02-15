@@ -2,11 +2,13 @@
 use time::Timespec;
 
 use std::collections::HashMap;
+use std::cmp::PartialEq;
 
+#[derive(Debug)]
 pub struct DataPoint {
-    key: String,
-    value: String,
-    timestamp: Timespec
+    pub key: String,
+    pub value: String,
+    pub timestamp: Timespec
 }
 
 impl DataPoint {
@@ -35,6 +37,14 @@ impl DataPoint {
     }
 
 
+}
+
+impl PartialEq for DataPoint {
+    fn eq(&self, other: &DataPoint)->bool {
+        return self.key == other.key &&
+            self.value == other.value &&
+            self.timestamp == other.timestamp;
+    }
 }
 
 

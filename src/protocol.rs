@@ -1,9 +1,11 @@
 use time::Timespec;
 use time;
 
+use data::DataPoint;
+
 pub enum MsgData {
     HELLO(u64, u16, Vec<String>),
-    DATA_SET(String, String, Timespec),
+    DATA_SET(DataPoint),
     INVALID(String)
 }
 
@@ -94,8 +96,8 @@ pub fn parse_broadcast(msg: &String)->MsgData {
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 //DATA
-pub fn get_set_data(key: String, val: String, time: &Timespec)->String {
-    format!("DATA SET {} {} {}", key, val, encode_timespec(&time))
+pub fn get_set_data(dat: DataPoint)->String {
+    format!("DATA SET {} {} {}", dat.key, dat.value, encode_timespec(&dat.timestamp))
 }
 
 pub fn is_data(msg: &String)->bool {
@@ -155,7 +157,7 @@ pub fn parse_data(message: &String)->MsgData {
     };
 
     if set {
-        return MsgData::DATA_SET(key, value, time);
+        return MsgData::DATA_SET(DataPoint::new(key, value, time));
     } else {
         return MsgData::INVALID("Other data actions not supported yet".to_string());
     }
@@ -262,11 +264,9 @@ mod protocol_tests {
     fn test_data_set_prot() {
 
         let tme = time::get_time();
-        match parse_data(&get_set_data("key".to_string(), "value".to_string(), &tme)) {
-            MsgData::DATA_SET(k, v, t)=> {
-                assert_eq!(k, "key");
-                assert_eq!(v, "value");
-                assert_eq!(t, tme);},
+        let dp = DataPoint::new("key".to_string(), "value".to_string(), tme);
+        match parse_data(&get_set_data(dp)) {
+            MsgData::DATA_SET(dp2)=> assert_eq!(dp, dp2),
             MsgData::INVALID(err) => panic!(err),
             _=>panic!("Wrong MsgData")
         }

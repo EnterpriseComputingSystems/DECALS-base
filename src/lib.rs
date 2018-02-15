@@ -190,7 +190,10 @@ impl Network {
         {
             let guard = self.devices.read().unwrap();
             for (_, device) in (*guard).iter() {
-                device.send_data(&datpt);
+                match device.send_data(datpt.clone()) {
+                    Err(e)=>println!("Error sending to device {:?}: {}", device, e),
+                    _=>{}
+                }
             }
         }
     }
@@ -265,11 +268,11 @@ fn handle_tcp_connection(network: &Arc<Network>, sock: TcpStream, addr: SocketAd
         match reader.read_line(&mut buf) {
             Ok(_)=> {
                 match protocol::parse_message(&buf) {
-                    MsgData::DATA_SET(k, v, t)=>{
+                    MsgData::DATA_SET(dp)=>{
 
                         {
                             let mut guard = network.data.write().unwrap();
-                            data::update_data_point(&mut (*guard), DataPoint::new(k, v, t));
+                            data::update_data_point(&mut (*guard), dp);
                         }
 
 

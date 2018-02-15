@@ -1,10 +1,12 @@
 
-
+use std::io::Write;
+use std::io;
 use std::net::{SocketAddr, TcpStream};
 
 use data::DataPoint;
+use protocol;
 
-
+#[derive(Debug)]
 pub struct Device {
     deviceid: u64,
     addr: SocketAddr,
@@ -18,7 +20,10 @@ impl Device {
         return newdev;
     }
 
-    pub fn send_data(&self, dat: &DataPoint) {
-        let stream = TcpStream::connect(self.addr);
+    pub fn send_data(&self, dat: DataPoint)->io::Result<()> {
+        match TcpStream::connect(self.addr.clone()) {
+            Ok(mut st)=>st.write_all(protocol::get_set_data(dat).as_bytes()),
+            Err(e)=>Err(e)
+        }
     }
 }
