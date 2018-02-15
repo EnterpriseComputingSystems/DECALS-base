@@ -2,6 +2,7 @@
 
 use std::net::{SocketAddr};
 
+use data::DataPoint;
 
 
 pub struct Device {
@@ -15,5 +16,9 @@ impl Device {
         let newdev = Device{deviceid: deviceid, addr: addr, interests: interests};
 
         return newdev;
+    }
+
+    pub fn send_data(&self, dat: DataPoint) {
+
     }
 }

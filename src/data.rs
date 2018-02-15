@@ -4,28 +4,43 @@ use time::Timespec;
 use std::collections::HashMap;
 
 pub struct DataPoint {
-    timestamp: Timespec,
-    value: String
+    key: String,
+    value: String,
+    timestamp: Timespec
 }
 
 impl DataPoint {
+
+    pub fn new(key: String, value: String, ts: Timespec)->DataPoint {
+        DataPoint{key, value, timestamp: ts}
+    }
 
     pub fn get_value(&self)->String {
         return self.value.clone();
     }
 
-    pub fn check_set_value(&mut self, val: String, ts: Timespec) {
-        if self.timestamp < ts {
-            self.timestamp = ts;
-            self.value = val;
+    pub fn check_set_value(&mut self, dp: DataPoint) {
+        if self.is_before(&dp) {
+            self.timestamp = dp.timestamp;
+            self.value = dp.value;
         }
+    }
+
+    pub fn is_before(&self, other: &DataPoint)->bool {
+        return self.timestamp < other.timestamp;
     }
 
 
 }
 
 
-pub fn update_data_point(dat: &mut HashMap<String, DataPoint>, key: String, val: String, ts: Timespec) {
-    let ent = dat.entry(key).or_insert(DataPoint{timestamp: ts, value: val.clone()});
-    (*ent).check_set_value(val, ts);
+pub fn update_data_point(dat: &mut HashMap<String, DataPoint>, datpt: DataPoint) {
+    match dat.get_mut(datpt.key.as_str()) {
+        Some(dp)=>{
+            dp.check_set_value(datpt);
+            return;
+        },
+        None=>{}
+    }
+    dat.insert(datpt.key.clone(), datpt);
 }

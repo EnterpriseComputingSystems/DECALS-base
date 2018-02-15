@@ -178,6 +178,24 @@ impl Network {
         }
     }
 
+    pub fn change_value(&self, key: String, val: String) {
+        let tme = time::get_time();
+        let datpt = DataPoint::new(key, val, tme);
+
+        {
+            let mut guard = self.data.write().unwrap();
+            data::update_data_point(&mut (*guard), datpt);
+        }
+
+        {
+            let guard = self.devices.read().unwrap();
+            for (_, device) in (*guard).iter() {
+
+            }
+        }
+    }
+
+
 }
 
 
@@ -245,13 +263,13 @@ fn handle_tcp_connection(network: &Arc<Network>, sock: TcpStream, addr: SocketAd
     loop {
         let mut buf = String::new();
         match reader.read_line(&mut buf) {
-            Ok(size)=> {
-                match protocol::parse_data(&buf) {
+            Ok(_)=> {
+                match protocol::parse_message(&buf) {
                     MsgData::DATA_SET(k, v, t)=>{
 
                         {
                             let mut guard = network.data.write().unwrap();
-                            data::update_data_point(&mut (*guard), k, v, t);
+                            data::update_data_point(&mut (*guard), DataPoint::new(k, v, t));
                         }
 
 
