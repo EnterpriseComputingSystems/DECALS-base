@@ -265,7 +265,7 @@ mod protocol_tests {
 
         let tme = time::get_time();
         let dp = DataPoint::new("key".to_string(), "value".to_string(), tme);
-        match parse_data(&get_set_data(dp)) {
+        match parse_data(&get_set_data(dp.clone())) {
             MsgData::DATA_SET(dp2)=> assert_eq!(dp, dp2),
             MsgData::INVALID(err) => panic!(err),
             _=>panic!("Wrong MsgData")
