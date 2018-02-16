@@ -4,7 +4,8 @@ use time::Timespec;
 use std::collections::HashMap;
 use std::cmp::PartialEq;
 
-#[derive(Debug)]
+
+#[derive(Debug, Clone)]
 pub struct DataPoint {
     pub key: String,
     pub value: String,

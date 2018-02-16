@@ -31,18 +31,19 @@ use data::DataPoint;
 const BROADCAST_PORT: u16 = 5320;
 const HEARTBEAT_DELAY: u64 = 3000;
 
-pub struct Network {
+pub struct Network <'a> {
     data: RwLock<HashMap<String, DataPoint>>,
     devices: RwLock<HashMap<u64, Device>>,
     interests: Vec<String>,
     broadcast_sock: UdpSocket,
     deviceid: u64,
-    port: u16
+    port: u16,
+    data_change_listener: Option<&'a (Fn(&DataPoint)+Send)>
 }
 
-impl Network {
+impl<'a> Network<'a> {
 
-    pub fn new(interests: Vec<String>)-> Arc<Network> {
+    pub fn new(interests: Vec<String>)-> Arc<Network<'a>> {
 
 
         //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -84,7 +85,8 @@ impl Network {
             devices: RwLock::new(HashMap::new()),
             broadcast_sock: broadcast_sock,
             deviceid: rand::random::<u64>(),
-            port: port
+            port: port,
+            data_change_listener: None
         };
 
         let net: Arc<Network> = Arc::new(new_net);
@@ -100,6 +102,10 @@ impl Network {
         println!("Servers Started");
 
         return net;
+    }
+
+    pub fn set_data_change_listener(&self, dcl: &'a (Fn(&DataPoint)+Send)) {
+        self.data_change_listener = Some(dcl);
     }
 
     //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -272,8 +278,10 @@ fn handle_tcp_connection(network: &Arc<Network>, sock: TcpStream, addr: SocketAd
 
                         {
                             let mut guard = network.data.write().unwrap();
-                            data::update_data_point(&mut (*guard), dp);
+                            data::update_data_point(&mut (*guard), dp.clone());
                         }
+
+                        network.data_change_listener(dp);
 
 
                     },
