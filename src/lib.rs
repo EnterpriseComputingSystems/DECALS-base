@@ -11,16 +11,21 @@ use net2::unix::UnixUdpBuilderExt;
 use std::collections::HashMap;
 use std::{thread};
 use std::time as stdtime;
-use std::sync::{RwLock, Arc};
+use std::sync::{RwLock, Arc, Mutex};
 use std::net::{SocketAddr, UdpSocket, TcpListener, TcpStream};
 use std::io::BufReader;
 use std::io::BufRead;
+use std::sync::mpsc::{Sender, Receiver};
+use std::sync::mpsc;
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 //Local modules
 mod protocol;
 mod device;
 mod data;
+mod event;
+
+use event::Event;
 
 use protocol::MsgData;
 
@@ -40,12 +45,13 @@ pub struct Network {
     broadcast_sock: UdpSocket,
     deviceid: u64,
     port: u16,
-    data_change_listener: DataChangeListener
+    event_sender: Mutex<Sender<Event>>,
+    pub event_receiver: Mutex<Receiver<Event>>
 }
 
 impl Network {
 
-    pub fn new(interests: Vec<String>, dcl: DataChangeListener)-> Arc<Network> {
+    pub fn new(interests: Vec<String>)-> Arc<Network> {
 
 
         //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -79,6 +85,7 @@ impl Network {
         broadcast_sock.set_broadcast(true).unwrap();
         //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+        let (send, rec) = mpsc::channel();
 
 
         let new_net: Network = Network{
@@ -88,7 +95,8 @@ impl Network {
             broadcast_sock: broadcast_sock,
             deviceid: rand::random::<u64>(),
             port: port,
-            data_change_listener: dcl
+            event_sender: Mutex::new(send),
+            event_receiver: Mutex::new(rec)
         };
 
         let net: Arc<Network> = Arc::new(new_net);
@@ -106,24 +114,20 @@ impl Network {
         return net;
     }
 
-    pub fn set_data_change_listener(&self, dcl: DataChangeListener) {
-        self.data_change_listener = Some(dcl);
-    }
-
     //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     // TCP
     fn start_tcp_serv(tcp_listener: TcpListener, network: Arc<Network>) {
 
-        thread::Builder::new().name("tcp_serv".to_string()).spawn(|| {
+        thread::Builder::new().name("tcp_serv".to_string()).spawn(move || {
 
             let net: Arc<Network> = network;
             loop {
                 match tcp_listener.accept() {
                     Ok((sock, addr))=>{
                         let netclone = net.clone();
-                        thread::spawn(|| {
+                        thread::spawn(move || {
                             let net = netclone;
-                            handle_tcp_connection(&net, sock, addr)});
+                            Network::handle_tcp_connection(&net, sock, addr)});
                     },
                     Err(e)=>println!("Connection from unknown host failed {}", e)
                 }
@@ -141,7 +145,7 @@ impl Network {
             loop {
                 let mut buf = vec![0; 1024];
                 match net.broadcast_sock.recv_from(&mut buf) {
-                    Ok((size, addr))=>handle_udp_message(&net, buf, size, addr),
+                    Ok((size, addr))=>Network::handle_udp_message(&net, buf, size, addr),
                     Err(e)=>println!("Error receiving UDP: {}", e)
                 }
             }
@@ -207,95 +211,105 @@ impl Network {
     }
 
 
-}
 
 
 
 
-//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-//UDP handling
-fn handle_udp_message(net: &Arc<Network>, buf: Vec<u8>, size: usize, addr: SocketAddr) {
 
-    let msg = match String::from_utf8(buf) {
-        Ok(s) => s[..size].trim().to_string(),
-        Err(e) =>{
-            println!("UDP Broadcast: Received invalid UTF: {}", e);
-            return;
-        }
-    };
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    //UDP handling
+    fn handle_udp_message(net: &Arc<Network>, buf: Vec<u8>, size: usize, addr: SocketAddr) {
 
-    print!("UDP received from {:?} : {} -> ", addr, msg);
+        let msg = match String::from_utf8(buf) {
+            Ok(s) => s[..size].trim().to_string(),
+            Err(e) =>{
+                println!("UDP Broadcast: Received invalid UTF: {}", e);
+                return;
+            }
+        };
 
-    if protocol::is_broadcast(&msg) {
-        match protocol::parse_broadcast(&msg) {
-            MsgData::INVALID(er)=> {
-                println!("Error parsing hello - {}", er);
-            },
-            MsgData::HELLO(deviceid, port, interests)=> {
+        print!("UDP received from {:?} : {} -> ", addr, msg);
 
-                if deviceid == net.deviceid {
-                    println!("this device");
-                } else {
+        if protocol::is_broadcast(&msg) {
+            match protocol::parse_broadcast(&msg) {
+                MsgData::INVALID(er)=> {
+                    println!("Error parsing hello - {}", er);
+                },
+                MsgData::HELLO(deviceid, port, interests)=> {
 
-                    let exists;
-                    {
-                        let guard = net.devices.read().unwrap();
-                        exists = (*guard).contains_key(&deviceid);
-                    }
-
-                    if exists {
-                        println!("device already known");
+                    if deviceid == net.deviceid {
+                        println!("this device");
                     } else {
 
-                        let newdev = Device::new(deviceid, SocketAddr::new(addr.ip(), port), interests);
-
+                        let exists;
                         {
-                            let mut guard = net.devices.write().unwrap();
-                            (*guard).insert(deviceid, newdev);
+                            let guard = net.devices.read().unwrap();
+                            exists = (*guard).contains_key(&deviceid);
                         }
 
-                        println!("device with id {} added", deviceid);
+                        if exists {
+                            println!("device already known");
+                        } else {
+
+                            let newdev = Device::new(deviceid, SocketAddr::new(addr.ip(), port), interests);
+
+                            {
+                                let mut guard = net.devices.write().unwrap();
+                                (*guard).insert(deviceid, newdev);
+                            }
+
+                            {
+                                let sender = net.event_sender.lock().unwrap();
+                                sender.send(Event::UnitDiscovered(deviceid)).unwrap();
+                            }
+
+                            println!("device with id {} added", deviceid);
+                        }
                     }
-                }
-            },
-            _=>println!("Message not HELLO")
+                },
+                _=>println!("Message not HELLO")
+            }
+        } else {
+            println!("Unrecognized message type");
         }
-    } else {
-        println!("Unrecognized message type");
     }
-}
 
-//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-//TCP handling
-fn handle_tcp_connection(network: &Arc<Network>, sock: TcpStream, addr: SocketAddr) {
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    //TCP handling
+    fn handle_tcp_connection(network: &Arc<Network>, sock: TcpStream, addr: SocketAddr) {
 
-    let mut reader = BufReader::new(sock);
+        let mut reader = BufReader::new(sock);
 
-    loop {
-        let mut buf = String::new();
-        match reader.read_line(&mut buf) {
-            Ok(_)=> {
-                match protocol::parse_message(&buf) {
-                    MsgData::DATA_SET(dp)=>{
+        loop {
+            let mut buf = String::new();
+            match reader.read_line(&mut buf) {
+                Ok(_)=> {
+                    match protocol::parse_message(&buf) {
+                        MsgData::DATA_SET(dp)=>{
 
-                        {
-                            let mut guard = network.data.write().unwrap();
-                            data::update_data_point(&mut (*guard), dp.clone());
-                        }
+                            {
+                                let mut guard = network.data.write().unwrap();
+                                data::update_data_point(&mut (*guard), dp.clone());
+                            }
 
-                        network.data_change_listener.unwrap().onChange(&dp);
+                            {
+                                let sender = network.event_sender.lock().unwrap();
+                                sender.send(Event::DataChange(dp.clone())).unwrap();
+                            }
 
 
-                    },
-                    MsgData::INVALID(e)=>println!("Error parsing incoming TCP message: {}", e),
-                    _=>println!("Unsupported incoming TCP message")
+                        },
+                        MsgData::INVALID(e)=>println!("Error parsing incoming TCP message: {}", e),
+                        _=>println!("Unsupported incoming TCP message")
+                    }
+                },
+                Err(e)=>{
+                    println!("Error with incoming TCP connection: {}", e);
+                    break;
                 }
-            },
-            Err(e)=>{
-                println!("Error with incoming TCP connection: {}", e);
-                break;
             }
         }
+
     }
 
 }
