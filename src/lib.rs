@@ -27,23 +27,25 @@ use protocol::MsgData;
 use device::Device;
 
 use data::DataPoint;
+use data::DataChangeListener;
+
 
 const BROADCAST_PORT: u16 = 5320;
 const HEARTBEAT_DELAY: u64 = 3000;
 
-pub struct Network <'a> {
+pub struct Network {
     data: RwLock<HashMap<String, DataPoint>>,
     devices: RwLock<HashMap<u64, Device>>,
     interests: Vec<String>,
     broadcast_sock: UdpSocket,
     deviceid: u64,
     port: u16,
-    data_change_listener: Option<&'a (Fn(&DataPoint)+Send)>
+    data_change_listener: DataChangeListener
 }
 
-impl<'a> Network<'a> {
+impl Network {
 
-    pub fn new(interests: Vec<String>)-> Arc<Network<'a>> {
+    pub fn new(interests: Vec<String>, dcl: DataChangeListener)-> Arc<Network> {
 
 
         //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -86,7 +88,7 @@ impl<'a> Network<'a> {
             broadcast_sock: broadcast_sock,
             deviceid: rand::random::<u64>(),
             port: port,
-            data_change_listener: None
+            data_change_listener: dcl
         };
 
         let net: Arc<Network> = Arc::new(new_net);
@@ -104,7 +106,7 @@ impl<'a> Network<'a> {
         return net;
     }
 
-    pub fn set_data_change_listener(&self, dcl: &'a (Fn(&DataPoint)+Send)) {
+    pub fn set_data_change_listener(&self, dcl: DataChangeListener) {
         self.data_change_listener = Some(dcl);
     }
 
@@ -112,14 +114,14 @@ impl<'a> Network<'a> {
     // TCP
     fn start_tcp_serv(tcp_listener: TcpListener, network: Arc<Network>) {
 
-        thread::Builder::new().name("tcp_serv".to_string()).spawn(move || {
+        thread::Builder::new().name("tcp_serv".to_string()).spawn(|| {
 
             let net: Arc<Network> = network;
             loop {
                 match tcp_listener.accept() {
                     Ok((sock, addr))=>{
                         let netclone = net.clone();
-                        thread::spawn(move || {
+                        thread::spawn(|| {
                             let net = netclone;
                             handle_tcp_connection(&net, sock, addr)});
                     },
@@ -281,7 +283,7 @@ fn handle_tcp_connection(network: &Arc<Network>, sock: TcpStream, addr: SocketAd
                             data::update_data_point(&mut (*guard), dp.clone());
                         }
 
-                        network.data_change_listener(dp);
+                        network.data_change_listener.unwrap().onChange(&dp);
 
 
                     },
