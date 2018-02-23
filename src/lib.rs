@@ -32,7 +32,6 @@ use protocol::MsgData;
 use device::Device;
 
 use data::DataPoint;
-use data::DataChangeListener;
 
 
 const BROADCAST_PORT: u16 = 5320;
