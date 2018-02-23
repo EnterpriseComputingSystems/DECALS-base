@@ -101,7 +101,7 @@ impl Network {
 
         let net: Arc<Network> = Arc::new(new_net);
 
-        Network::start_tcp_serv(tcp_listener, net.clone());
+        Network::start_tcp_serv(net.clone(), tcp_listener);
         println!("TCP Server running on port {}", port);
 
         Network::start_udp_serv(net.clone());
@@ -116,18 +116,16 @@ impl Network {
 
     //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     // TCP
-    fn start_tcp_serv(tcp_listener: TcpListener, network: Arc<Network>) {
+    fn start_tcp_serv(net: Arc<Network>, tcp_listener: TcpListener) {
 
         thread::Builder::new().name("tcp_serv".to_string()).spawn(move || {
 
-            let net: Arc<Network> = network;
             loop {
                 match tcp_listener.accept() {
                     Ok((sock, addr))=>{
                         let netclone = net.clone();
                         thread::spawn(move || {
-                            let net = netclone;
-                            Network::handle_tcp_connection(&net, sock, addr)});
+                            Network::handle_tcp_connection(&netclone, sock, addr)});
                     },
                     Err(e)=>println!("Connection from unknown host failed {}", e)
                 }
@@ -137,11 +135,10 @@ impl Network {
 
     //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     //UDP
-    fn start_udp_serv(network: Arc<Network>) {
+    fn start_udp_serv(net: Arc<Network>) {
 
-        thread::Builder::new().name("udp_serv".to_string()).spawn(|| {
+        thread::Builder::new().name("udp_serv".to_string()).spawn(move || {
 
-            let net: Arc<Network> = network;
             loop {
                 let mut buf = vec![0; 1024];
                 match net.broadcast_sock.recv_from(&mut buf) {
@@ -152,6 +149,7 @@ impl Network {
         }).expect("Error starting udp listener thread");
     }
 
+    // Start a process to send out via udp broadcast this servers information
     fn start_heartbeat(network: Arc<Network>) {
 
         thread::Builder::new().name("decals_heartbeat".to_string()).spawn(|| {
@@ -166,6 +164,7 @@ impl Network {
         }).expect("Error starting heartbeat thread");
     }
 
+    //Broadcast over udp this device's information
     fn broadcast_info(&self) {
         let addr: SocketAddr = SocketAddr::from(([255, 255, 255, 255], BROADCAST_PORT));
 
@@ -176,13 +175,17 @@ impl Network {
         };
     }
 
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    //Data management
+
     // Get the number of discovered devices
     pub fn get_num_devices(&self) ->usize {
         let guard = self.devices.read().unwrap();
         return (*guard).len();
     }
 
-    pub fn get_value(&self, key: &String)->String {
+    //Conveinience function to get the value of a key from the data map
+    pub fn get_data_value(&self, key: &String)->String {
         let guard = self.data.read().unwrap();
         match (*guard).get(key.as_str()) {
             Some(s)=>return s.get_value(),
@@ -190,30 +193,30 @@ impl Network {
         }
     }
 
-    pub fn change_value(&self, key: String, val: String) {
-        let tme = time::get_time();
-        let datpt = DataPoint::new(key, val, tme);
+    //Set the value of a data point and update relevant external devices
+    pub fn change_data_value(net: Arc<Network>, key: String, val: String) {
 
-        {
-            let mut guard = self.data.write().unwrap();
-            data::update_data_point(&mut (*guard), datpt.clone());
-        }
+        thread::spawn(move || {
 
-        {
-            let guard = self.devices.read().unwrap();
-            for (_, device) in (*guard).iter() {
-                match device.send_data(datpt.clone()) {
-                    Err(e)=>println!("Error sending to device {:?}: {}", device, e),
-                    _=>{}
+            let tme = time::get_time();
+            let datpt = DataPoint::new(key, val, tme);
+
+            {
+                let mut guard = net.data.write().unwrap();
+                data::update_data_point(&mut (*guard), datpt.clone());
+            }
+
+            {
+                let guard = net.devices.read().unwrap();
+                for (_, device) in (*guard).iter() {
+                    match device.send_data(datpt.clone()) {
+                        Err(e)=>println!("Error sending to device {:?}: {}", device, e),
+                        _=>{}
+                    }
                 }
             }
-        }
+        });
     }
-
-
-
-
-
 
 
     //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
