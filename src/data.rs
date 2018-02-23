@@ -59,11 +59,3 @@ pub fn update_data_point(dat: &mut HashMap<String, DataPoint>, datpt: DataPoint)
     }
     dat.insert(datpt.key.clone(), datpt);
 }
-
-
-//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-// Listeners
-
-pub trait DataChangeListener {
-    fn onChange(&self, &DataPoint);
-}
