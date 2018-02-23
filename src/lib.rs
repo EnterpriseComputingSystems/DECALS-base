@@ -201,6 +201,8 @@ impl Network {
             let tme = time::get_time();
             let datpt = DataPoint::new(key, val, tme);
 
+            println!("Sending data update: {:?}", datpt);
+
             {
                 let mut guard = net.data.write().unwrap();
                 data::update_data_point(&mut (*guard), datpt.clone());
@@ -283,12 +285,17 @@ impl Network {
 
         let mut reader = BufReader::new(sock);
 
+
+        print!("TCP connection from {:?} -> ", addr);
+
         loop {
             let mut buf = String::new();
             match reader.read_line(&mut buf) {
                 Ok(_)=> {
                     match protocol::parse_message(&buf) {
                         MsgData::DATA_SET(dp)=>{
+
+                            println!("Updated data {:?}", dp);
 
                             {
                                 let mut guard = network.data.write().unwrap();
@@ -297,8 +304,9 @@ impl Network {
 
                             {
                                 let sender = network.event_sender.lock().unwrap();
-                                sender.send(Event::DataChange(dp.clone())).unwrap();
+                                sender.send(Event::DataChange(dp)).unwrap();
                             }
+
 
 
                         },
