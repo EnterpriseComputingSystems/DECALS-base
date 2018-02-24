@@ -55,7 +55,7 @@ impl Network {
 
         //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         // TCP initialization
-        let tcpaddr: SocketAddr = SocketAddr::from(([127, 0, 0, 1], 0));
+        let tcpaddr: SocketAddr = SocketAddr::from(([0, 0, 0, 0], 0));
 
         let tcp_listener = match TcpListener::bind(&tcpaddr) {
             Ok(lst) => lst,
@@ -68,7 +68,7 @@ impl Network {
 
         //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         // UDP initialization
-        let udpaddr: SocketAddr = SocketAddr::from(([127, 0, 0, 1], BROADCAST_PORT));
+        let udpaddr: SocketAddr = SocketAddr::from(([0, 0, 0, 0], BROADCAST_PORT));
 
         //Build socket
         let builder: UdpBuilder = UdpBuilder::new_v4().unwrap();
