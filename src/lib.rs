@@ -290,7 +290,11 @@ impl Network {
         loop {
             let mut buf = String::new();
             match reader.read_line(&mut buf) {
-                Ok(_)=> {
+                Ok(size)=> {
+                    if size == 0 {
+                        break;
+                    }
+
                     match protocol::parse_message(&buf) {
                         MsgData::DATA_SET(dp)=>{
 
