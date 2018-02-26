@@ -73,6 +73,9 @@ impl Network {
         //Build socket
         let builder: UdpBuilder = UdpBuilder::new_v4().unwrap();
 
+
+        builder.reuse_address(true).unwrap();
+
         #[cfg(unix)]
         builder.reuse_port(true).unwrap();
 
