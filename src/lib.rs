@@ -196,7 +196,9 @@ impl Network {
     }
 
     //Set the value of a data point and update relevant external devices
-    pub fn change_data_value(net: Arc<Network>, key: String, val: String) {
+    pub fn change_data_value(network: &Arc<Network>, key: String, val: String) {
+
+        let net = network.clone();
 
         thread::spawn(move || {
 
