@@ -20,11 +20,13 @@ use std::sync::mpsc;
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 //Local modules
+pub mod support;
+
+
 mod protocol;
 mod device;
 mod data;
 mod event;
-mod support;
 
 use event::Event;
 
