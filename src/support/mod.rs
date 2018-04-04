@@ -1,6 +1,6 @@
 
 
-mod alert {
+pub mod alert {
 
     pub enum Alert{
         Normal,
