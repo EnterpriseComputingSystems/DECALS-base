@@ -4,6 +4,7 @@ pub mod alert {
 
     pub const ALERT_KEY: &str = "ALERT_STATUS";
 
+    #[derive(Clone, Copy)]
     pub enum Alert{
         Normal,
         Yellow,
