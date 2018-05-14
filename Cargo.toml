@@ -7,4 +7,4 @@ authors = ["Francesco Macagno <fjmacagno1@yahoo.com>", "Carly Robison <carlyelle
 net2 = "0.2"
 rand = "0.4"
 time = "0.1"
-log = { version = "0.4"}
+log = "0.4"
