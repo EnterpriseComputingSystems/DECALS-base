@@ -14,7 +14,7 @@ use std::collections::HashMap;
 use std::{thread};
 use std::time as stdtime;
 use std::sync::{RwLock, Arc, Mutex};
-use std::net::{SocketAddr, UdpSocket, TcpListener, TcpStream};
+use std::net::{SocketAddr, UdpSocket, TcpListener, TcpStream, IpAddr};
 use std::io::BufReader;
 use std::io::BufRead;
 use std::sync::mpsc::{Sender, Receiver};
@@ -48,7 +48,7 @@ pub struct Network {
     interests: Vec<String>,
     broadcast_sock: UdpSocket,
     deviceid: u64,
-    port: u16,
+    local_addr: SocketAddr,
     event_sender: Mutex<Sender<Event>>,
     pub event_receiver: Mutex<Receiver<Event>>
 }
@@ -71,7 +71,7 @@ impl Network {
         };
 
 
-        let port = tcp_listener.local_addr().unwrap().port();
+        let local_addr = tcp_listener.local_addr().unwrap();
         //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
         //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -104,7 +104,7 @@ impl Network {
             devices: RwLock::new(HashMap::new()),
             broadcast_sock: broadcast_sock,
             deviceid: rand::random::<u64>(),
-            port: port,
+            local_addr: local_addr,
             event_sender: Mutex::new(send),
             event_receiver: Mutex::new(rec)
         };
@@ -113,7 +113,7 @@ impl Network {
 
         info!("Starting TCP server...");
         Network::start_tcp_serv(net.clone(), tcp_listener);
-        info!("TCP Server running on port {}", port);
+        info!("TCP Server running on port {}", local_addr.port());
 
         info!("Starting UDP server...");
         Network::start_udp_serv(net.clone());
@@ -182,20 +182,38 @@ impl Network {
         let addr: SocketAddr = SocketAddr::from(([255, 255, 255, 255], BROADCAST_PORT));
 
         info!("Broadcasting....");
-        match self.broadcast_sock.send_to(protocol::get_broadcast(self.deviceid, self.port, &self.interests).as_bytes(), &addr) {
+        match self.broadcast_sock.send_to(protocol::get_broadcast(self.deviceid, self.local_addr.port(), &self.interests).as_bytes(), &addr) {
             Ok(_) => return,
             Err(error) => println!("Error broadcasting {}", error)
         };
     }
 
-    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    //Data management
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Network info
 
     // Get the number of discovered devices
     pub fn get_num_devices(&self) ->usize {
         let guard = self.devices.read().unwrap();
         return (*guard).len();
     }
+
+    // Get the number of discovered devices
+    pub fn get_id(&self) ->u64 {
+        self.deviceid
+    }
+
+    pub fn get_ip(&self) ->IpAddr {
+        self.local_addr.ip()
+    }
+
+    pub fn get_port(&self) ->u16 {
+        self.local_addr.port()
+    }
+
+
+    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    //Data management
+
 
     //Conveinience function to get the value of a key from the data map
     pub fn get_data_value(&self, key: &String)->String {
