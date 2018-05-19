@@ -241,6 +241,12 @@ impl Network {
                 data::update_data_point(&mut (*guard), datpt.clone());
             }
 
+            // Send an update event so the listener can properly update
+            {
+                let sender = net.event_sender.lock().unwrap();
+                sender.send(Event::DataChange(datpt.clone())).unwrap();
+            }
+
             {
                 let guard = net.devices.read().unwrap();
                 for (_, device) in (*guard).iter() {
