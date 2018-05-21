@@ -7,7 +7,7 @@ pub mod alert {
     pub const ALERT_KEY: &str = "ALERT_STATUS";
 
     /// Represents the various possible 'Alert' states a system could be in, a la StarTrek.
-    #[derive(Clone, Copy)]
+    #[derive(Clone, Copy, PartialEq)]
     pub enum Alert{
         Normal,
         Yellow,
