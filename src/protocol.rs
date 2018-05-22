@@ -24,7 +24,7 @@ pub fn get_hello(deviceid: u64, port: u16, interests: &Vec<String>)->String {
         output = output + inter;
     }
 
-    return output + "]";
+    return output + "]\n";
 }
 
 pub fn is_hello(msg: &String)->bool {
@@ -97,7 +97,7 @@ pub fn parse_broadcast(msg: &String)->MsgData {
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 //DATA
 pub fn get_set_data(dat: DataPoint)->String {
-    format!("DATA SET {} {} {}", dat.key, dat.value, encode_timespec(&dat.timestamp))
+    format!("DATA SET {} {} {}\n", dat.key, dat.value, encode_timespec(&dat.timestamp))
 }
 
 pub fn is_data(msg: &String)->bool {

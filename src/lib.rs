@@ -247,16 +247,18 @@ impl Network {
                 sender.send(Event::DataChange(datpt.clone())).unwrap();
             }
 
-            {
-                let guard = net.devices.read().unwrap();
-                for (_, device) in (*guard).iter() {
-                    match device.send_data(datpt.clone()) {
-                        Err(e)=>error!("Error sending to device {:?}: {}", device, e),
-                        _=>{}
-                    }
-                }
-            }
+            Network::broadcast_data(&net, vec!(datpt));
         });
+    }
+
+    fn broadcast_data(network: &Arc<Network>, dat: Vec<DataPoint>) {
+        let guard = network.devices.read().unwrap();
+        for (_, device) in (*guard).iter() {
+            match device.send_data(dat.clone()) {
+                Err(e)=>error!("Error sending to device {:?}: {}", device, e),
+                _=>{}
+            }
+        }
     }
 
 
@@ -306,6 +308,10 @@ impl Network {
                                 let sender = net.event_sender.lock().unwrap();
                                 sender.send(Event::UnitDiscovered(deviceid)).unwrap();
                             }
+
+                            //Update the new device with this device's data
+                            let all_data: Vec<DataPoint> = net.data.read().unwrap().iter().map(|(_, dp)| dp.clone()).collect();
+                            Network::broadcast_data(net, all_data);
 
                             info!("device with id {} added", deviceid);
                         }
