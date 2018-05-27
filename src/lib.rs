@@ -240,6 +240,10 @@ impl Network {
         self.data.get_reference(key)
     }
 
+    pub fn get_data_manager(&self)->DataManager {
+        self.data.clone()
+    }
+
     /// Set the value of a data point and update relevant external devices
     /// Asynchronous
     pub fn change_data_value(network: &Arc<Network>, key: String, val: String) {
