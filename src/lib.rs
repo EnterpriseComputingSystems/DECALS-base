@@ -36,14 +36,14 @@ use protocol::MsgData;
 
 use device::Device;
 
-use data::DataPoint;
+use data::{DataPoint, DataManager, DataReference};
 
 
 const BROADCAST_PORT: u16 = 5320;
 const HEARTBEAT_DELAY: u64 = 3000;
 
 pub struct Network {
-    data: RwLock<HashMap<String, DataPoint>>,
+    data: DataManager,
     devices: RwLock<HashMap<u64, Device>>,
     interests: Vec<String>,
     broadcast_sock: UdpSocket,
@@ -100,7 +100,7 @@ impl Network {
 
         let new_net: Network = Network{
             interests: interests,
-            data: RwLock::new(HashMap::new()),
+            data: DataManager::new(),
             devices: RwLock::new(HashMap::new()),
             broadcast_sock: broadcast_sock,
             deviceid: rand::random::<u64>(),
@@ -122,9 +122,25 @@ impl Network {
         info!("Starting heartbeat...");
         Network::start_heartbeat(net.clone());
 
+        info!("Starting data scanner...");
+        Network::start_data_scanner(net.clone());
+
         info!("Servers Started");
 
         return net;
+    }
+
+
+    /// Listens for changes to the data_manager's data via dirty keys, then broadcasts them
+    fn start_data_scanner(net: Arc<Network>) {
+        thread::Builder::new().name("data_scanner".to_string()).spawn(move || {
+
+            loop {
+                let dp = net.data.get_dirty_entry();
+
+                Network::broadcast_data(&net, vec!(dp));
+            }
+        }).expect("Error starting data scanner thread");
     }
 
     //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -217,14 +233,15 @@ impl Network {
 
     //Conveinience function to get the value of a key from the data map
     pub fn get_data_value(&self, key: &String)->String {
-        let guard = self.data.read().unwrap();
-        match (*guard).get(key.as_str()) {
-            Some(s)=>return s.get_value(),
-            None=>return String::new()
-        }
+        self.data.get_datapoint(key).value
     }
 
-    //Set the value of a data point and update relevant external devices
+    pub fn get_data_reference(&self, key: &String)->DataReference {
+        self.data.get_reference(key)
+    }
+
+    /// Set the value of a data point and update relevant external devices
+    /// Asynchronous
     pub fn change_data_value(network: &Arc<Network>, key: String, val: String) {
 
         let net = network.clone();
@@ -236,10 +253,8 @@ impl Network {
 
             info!("Sending data update: {:?}", datpt);
 
-            {
-                let mut guard = net.data.write().unwrap();
-                data::update_data_point(&mut (*guard), datpt.clone());
-            }
+            net.data.update_data_point(datpt.clone());
+
 
             // Send an update event so the listener can properly update
             {
@@ -304,13 +319,10 @@ impl Network {
                                 (*guard).insert(deviceid, newdev);
                             }
 
-                            {
-                                let sender = net.event_sender.lock().unwrap();
-                                sender.send(Event::UnitDiscovered(deviceid)).unwrap();
-                            }
+                            Network::send_event(net, Event::UnitDiscovered(deviceid));
 
                             //Update the new device with this device's data
-                            let all_data: Vec<DataPoint> = net.data.read().unwrap().iter().map(|(_, dp)| dp.clone()).collect();
+                            let all_data: Vec<DataPoint> = net.data.get_all_data();
                             Network::broadcast_data(net, all_data);
 
                             info!("device with id {} added", deviceid);
@@ -326,7 +338,7 @@ impl Network {
 
     //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     //TCP handling
-    fn handle_tcp_connection(network: &Arc<Network>, sock: TcpStream, addr: SocketAddr) {
+    fn handle_tcp_connection(net: &Arc<Network>, sock: TcpStream, addr: SocketAddr) {
 
         let mut reader = BufReader::new(sock);
 
@@ -346,18 +358,8 @@ impl Network {
 
                             info!("Updated data {:?}", dp);
 
-                            {
-                                let mut guard = network.data.write().unwrap();
-                                data::update_data_point(&mut (*guard), dp.clone());
-                            }
-
-                            {
-                                let sender = network.event_sender.lock().unwrap();
-                                sender.send(Event::DataChange(dp)).unwrap();
-                            }
-
-
-
+                            net.data.update_data_point(dp.clone());
+                            Network::send_event(net, Event::DataChange(dp));
                         },
                         MsgData::INVALID(e)=>error!("Error parsing incoming TCP message: {}", e),
                         _=>warn!("Unsupported incoming TCP message")
@@ -370,6 +372,10 @@ impl Network {
             }
         }
 
+    }
+
+    fn send_event(network: &Arc<Network>, ev: Event) {
+        network.event_sender.lock().unwrap().send(ev).unwrap();
     }
 
 }

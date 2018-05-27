@@ -1,8 +1,14 @@
 
 use time::Timespec;
 
-use std::collections::HashMap;
+use std::collections::{HashMap};
 use std::cmp::PartialEq;
+use std::sync::{Arc, RwLock, Mutex};
+use std::sync::mpsc;
+use std::sync::mpsc::{Sender, Receiver};
+
+use time;
+
 
 
 #[derive(Debug, Clone)]
@@ -49,13 +55,107 @@ impl PartialEq for DataPoint {
 }
 
 
-pub fn update_data_point(dat: &mut HashMap<String, DataPoint>, datpt: DataPoint) {
-    match dat.get_mut(datpt.key.as_str()) {
-        Some(dp)=>{
-            dp.check_set_value(datpt);
-            return;
-        },
-        None=>{}
+
+
+#[derive(Debug, Clone)]
+pub struct DataReference {
+    pub current_value: Arc<RwLock<DataPoint>>,
+    data_manager: DataManager
+}
+
+impl DataReference {
+    pub fn new(value: Arc<RwLock<DataPoint>>, data_manager: DataManager)->DataReference {
+        DataReference{current_value: value, data_manager}
     }
-    dat.insert(datpt.key.clone(), datpt);
+
+    pub fn from_dp(dp: DataPoint, data_manager: DataManager)->DataReference {
+        DataReference::new(Arc::new(RwLock::new(dp)), data_manager)
+    }
+
+    pub fn update_data(&self, val: String) {
+        let mut dp = self.current_value.write().unwrap();
+        dp.value = val;
+        dp.timestamp = time::get_time();
+        self.data_manager.set_entry_dirty(self.get_key());
+    }
+
+    pub fn get_data(&self)->DataPoint {
+        self.current_value.read().unwrap().clone()
+    }
+
+    pub fn get_key(&self)->String {
+        self.current_value.read().unwrap().key.clone()
+    }
+
+    pub fn get_value(&self)->String {
+        self.current_value.read().unwrap().value.clone()
+    }
+
+
+}
+
+#[derive(Debug, Clone)]
+pub struct DataManager {
+    data: Arc<RwLock<HashMap<String, DataReference>>>,
+    dirty_list_sender: Arc<Mutex<Sender<String>>>,
+    dirty_list_receiver: Arc<Mutex<Receiver<String>>>
+}
+
+
+impl DataManager {
+
+    pub fn new()->DataManager {
+        let (send, recv) = mpsc::channel();
+        DataManager{data: Arc::new(RwLock::new(HashMap::new())),
+            dirty_list_sender: Arc::new(Mutex::new(send)),
+            dirty_list_receiver: Arc::new(Mutex::new(recv))}
+    }
+
+    fn create_new_entry(&self, key: &str)->DataReference {
+        DataReference::from_dp(DataPoint::new(key.to_string(), String::new(), time::get_time()), self.clone())
+    }
+
+    pub fn get_reference(&self, key:  &String)->DataReference {
+        let mut data = self.data.write().unwrap();
+        data.entry(key.clone()).or_insert(self.create_new_entry(&key)).clone()
+    }
+
+    pub fn get_datapoint(&self, key: &String)->DataPoint {
+        self.data.write().unwrap().entry(key.clone()).or_insert(self.create_new_entry(&key)).get_data()
+    }
+
+    pub fn update_data_point(&self, datpt: DataPoint) {
+        let mut data = self.data.write().unwrap();
+        let mut insert = true;
+
+        if let Some(dp) = data.get_mut(datpt.key.as_str()) {
+            dp.current_value.write().unwrap().check_set_value(datpt.clone());
+            insert = false;
+        }
+
+        if insert {
+            data.insert(datpt.key.clone(), DataReference::from_dp(datpt.clone(), self.clone()));
+        }
+
+        self.set_entry_dirty(datpt.key);
+
+    }
+
+    pub fn get_all_data(&self)->Vec<DataPoint> {
+        self.data.read().unwrap().iter().map(|(_, dr)| dr.get_data()).collect()
+    }
+
+    pub fn set_entry_dirty(&self, key: String) {
+        self.dirty_list_sender.lock().unwrap().send(key).unwrap();
+    }
+
+    pub fn get_dirty_entry(&self)->DataPoint {
+        let key = self.dirty_list_receiver.lock().unwrap().recv().unwrap();
+        if let Some(val) = self.data.read().unwrap().get(&key) {
+            return val.get_data();
+        } else {
+            panic!("dirty entry doesnt exist");
+        }
+    }
+
 }
