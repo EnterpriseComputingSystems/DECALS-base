@@ -252,13 +252,9 @@ impl Network {
 
         thread::spawn(move || {
 
-            let tme = time::get_time();
-            let datpt = DataPoint::new(key, val, tme);
-
-            info!("Sending data update: {:?}", datpt);
+            let datpt = DataPoint::new(key, val, time::get_time());
 
             net.data.update_data_point(datpt.clone());
-
 
             // Send an update event so the listener can properly update
             {
@@ -271,6 +267,9 @@ impl Network {
     }
 
     fn broadcast_data(network: &Arc<Network>, dat: Vec<DataPoint>) {
+
+        info!("Sending data update: {:?}", dat);
+
         let guard = network.devices.read().unwrap();
         for (_, device) in (*guard).iter() {
             match device.send_data(dat.clone()) {
@@ -362,7 +361,7 @@ impl Network {
 
                             info!("Updated data {:?}", dp);
 
-                            net.data.update_data_point(dp.clone());
+                            net.data.update_data_point_locally(dp.clone());
                             Network::send_event(net, Event::DataChange(dp));
                         },
                         MsgData::INVALID(e)=>error!("Error parsing incoming TCP message: {}", e),

@@ -60,12 +60,13 @@ impl PartialEq for DataPoint {
 #[derive(Debug, Clone)]
 pub struct DataReference {
     pub current_value: Arc<RwLock<DataPoint>>,
+    last_time: Timespec,
     data_manager: DataManager
 }
 
 impl DataReference {
     pub fn new(value: Arc<RwLock<DataPoint>>, data_manager: DataManager)->DataReference {
-        DataReference{current_value: value, data_manager}
+        DataReference{current_value: value, data_manager, last_time: time::Timespec::new(0, 0)}
     }
 
     pub fn from_dp(dp: DataPoint, data_manager: DataManager)->DataReference {
@@ -76,7 +77,7 @@ impl DataReference {
         let mut dp = self.current_value.write().unwrap();
         dp.value = val;
         dp.timestamp = time::get_time();
-        self.data_manager.set_entry_dirty(self.get_key());
+        self.data_manager.set_entry_dirty(dp.key.clone());
     }
 
     pub fn get_data(&self)->DataPoint {
@@ -91,7 +92,15 @@ impl DataReference {
         self.current_value.read().unwrap().value.clone()
     }
 
+    pub fn test_changed(&mut self)->bool {
+        let ts = self.current_value.read().unwrap().timestamp;
+        if self.last_time != ts {
+            self.last_time = ts;
+            return true;
+        }
 
+        return false;
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -124,19 +133,22 @@ impl DataManager {
         self.data.write().unwrap().entry(key.clone()).or_insert(self.create_new_entry(&key)).get_data()
     }
 
-    pub fn update_data_point(&self, datpt: DataPoint) {
+    /// Updates a data point just locally, so without marking it dirty to be broadcast
+    pub fn update_data_point_locally(&self, datpt: DataPoint) {
         let mut data = self.data.write().unwrap();
-        let mut insert = true;
 
         if let Some(dp) = data.get_mut(datpt.key.as_str()) {
-            dp.current_value.write().unwrap().check_set_value(datpt.clone());
-            insert = false;
+            dp.current_value.write().unwrap().check_set_value(datpt);
+            return;
         }
 
-        if insert {
-            data.insert(datpt.key.clone(), DataReference::from_dp(datpt.clone(), self.clone()));
-        }
+        data.insert(datpt.key.clone(), DataReference::from_dp(datpt, self.clone()));
+    }
 
+    /// Updates a data point and marks it dirty
+    pub fn update_data_point(&self, datpt: DataPoint) {
+
+        self.update_data_point_locally(datpt.clone());
         self.set_entry_dirty(datpt.key);
 
     }
