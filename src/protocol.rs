@@ -6,6 +6,7 @@ use data::DataPoint;
 pub enum MsgData {
     HELLO(u64, u16, Vec<String>),
     DATA_SET(DataPoint),
+    REGISTER_SETTING(String, Vec<String>),
     INVALID(String)
 }
 
@@ -16,12 +17,14 @@ pub fn get_hello(deviceid: u64, port: u16, interests: &Vec<String>)->String {
 
     let mut output: String = format!("HELLO {} {} [", deviceid, port);
 
-    let first = true;
+    let mut first = true;
     for inter in interests.iter().clone() {
 
         if !first { output = output + ","; }
 
         output = output + inter;
+
+        first = false;
     }
 
     return output + "]\n";
@@ -163,6 +166,49 @@ pub fn parse_data(message: &String)->MsgData {
     }
 }
 
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// Register setting
+const REGISTER_SETTING_HEADER: &str = "REGISTER SETTING ";
+
+pub fn get_register_setting(key: String, options: &Vec<String>)->String {
+
+    let mut output: String = format!("{}{} [", REGISTER_SETTING_HEADER, key);
+
+    let mut first = true;
+    for inter in options.iter().clone() {
+
+        if !first { output = output + ","; }
+
+        output = output + inter;
+
+        first = false;
+    }
+
+    return output + "]\n";
+}
+
+pub fn is_register_setting(msg: &String)->bool {
+    return msg.starts_with(REGISTER_SETTING_HEADER);
+}
+
+pub fn parse_register_setting(mut msg: String)->MsgData {
+
+    assert!(is_register_setting(&msg));
+
+    //Remove header
+    let mut data = msg.split_off(REGISTER_SETTING_HEADER.len());
+
+    let mut options: String = match data.find(' ') {
+        Some(idx)=>data.split_off(idx).trim().to_string(),
+        None=>return MsgData::INVALID("Error parsing REGISTER_SETTING: Missing key".to_string())
+    };
+
+    options = options.split_off(1); //Remove brackets
+    options.pop();
+
+    return MsgData::REGISTER_SETTING(data, options.split(',').map(|s| s.to_string()).collect());
+}
+
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // Helpers
@@ -180,6 +226,10 @@ pub fn parse_message(message: &String)->MsgData {
 
     if is_data(&message) {
         return parse_data(&message);
+    }
+
+    if is_register_setting(&message) {
+        return parse_register_setting(message.clone());
     }
 
     return MsgData::INVALID(format!("Unknown message type: {}", message));
@@ -234,6 +284,7 @@ mod protocol_tests {
     fn test_broadcast_prot() {
         let mut interests: Vec<String> = Vec::new();
         interests.push("Test".to_string());
+        interests.push("Test2".to_string());
 
         match parse_broadcast(&get_broadcast(1234567890, 1234, &interests)) {
             MsgData::HELLO(did, p, i)=> {
@@ -249,6 +300,7 @@ mod protocol_tests {
     fn test_hello_prot() {
         let mut interests: Vec<String> = Vec::new();
         interests.push("Test".to_string());
+        interests.push("Test2".to_string());
 
         match parse_hello(&get_hello(1234567890, 1234, &interests)) {
             MsgData::HELLO(did, p, i)=> {
@@ -267,6 +319,22 @@ mod protocol_tests {
         let dp = DataPoint::new("key".to_string(), "value".to_string(), tme);
         match parse_data(&get_set_data(dp.clone())) {
             MsgData::DATA_SET(dp2)=> assert_eq!(dp, dp2),
+            MsgData::INVALID(err) => panic!(err),
+            _=>panic!("Wrong MsgData")
+        }
+    }
+
+    #[test]
+    fn test_register_setting_prot() {
+
+        let mut options: Vec<String> = Vec::new();
+        options.push("Test".to_string());
+        options.push("Test 2".to_string());
+
+        match parse_register_setting(get_register_setting("settingkey".to_string(), &options)) {
+            MsgData::REGISTER_SETTING(key, opt)=> {
+                assert_eq!(key, "settingkey".to_string());
+                assert_eq!(options, opt);},
             MsgData::INVALID(err) => panic!(err),
             _=>panic!("Wrong MsgData")
         }

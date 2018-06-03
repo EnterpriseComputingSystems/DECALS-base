@@ -50,7 +50,8 @@ pub struct Network {
     deviceid: u64,
     local_addr: SocketAddr,
     event_sender: Mutex<Sender<Event>>,
-    pub event_receiver: Mutex<Receiver<Event>>
+    pub event_receiver: Mutex<Receiver<Event>>,
+    settings: RwLock<HashMap<String, Vec<String>>>
 }
 
 impl Network {
@@ -106,7 +107,8 @@ impl Network {
             deviceid: rand::random::<u64>(),
             local_addr: local_addr,
             event_sender: Mutex::new(send),
-            event_receiver: Mutex::new(rec)
+            event_receiver: Mutex::new(rec),
+            settings: RwLock::new(HashMap::new())
         };
 
         let net: Arc<Network> = Arc::new(new_net);
@@ -279,6 +281,40 @@ impl Network {
         }
     }
 
+    pub fn register_setting(network: &Arc<Network>, key: String, options: Vec<String>)->DataReference {
+        let net = network.clone();
+        let keycpy = key.clone();
+
+        thread::spawn(move || {
+            {
+                let mut tmp = net.settings.write().unwrap();
+
+                if !(*tmp).contains_key(&key) {
+
+                    (*tmp).insert(key.clone(), options.clone());
+                    Network::send_event(&net, Event::SettingRegistered(key.clone(), options.clone()));
+                } else {
+                    return;
+                }
+            } // Make sure the lock gets released before begginning net ops
+
+            let guard = net.devices.read().unwrap();
+            for (_, device) in (*guard).iter() {
+                match device.send_string(protocol::get_register_setting(key.clone(), &options)) {
+                    Err(e)=>error!("Error sending to device {:?}: {}", device, e),
+                    _=>{}
+                }
+            }
+
+        });
+
+        network.get_data_reference(&keycpy)
+    }
+
+    pub fn get_common_settings(&self)->HashMap<String, Vec<String>> {
+        self.settings.read().unwrap().clone()
+    }
+
 
     //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     //UDP handling
@@ -363,6 +399,14 @@ impl Network {
 
                             net.data.update_data_point_locally(dp.clone());
                             Network::send_event(net, Event::DataChange(dp));
+                        },
+                        MsgData::REGISTER_SETTING(key, options)=> {
+                            info!("New setting registered: {}", key);
+                            let mut tmp = net.settings.write().unwrap();
+                            if !(*tmp).contains_key(&key) {
+                                (*tmp).insert(key.clone(), options.clone());
+                                Network::send_event(net, Event::SettingRegistered(key, options));
+                            }
                         },
                         MsgData::INVALID(e)=>error!("Error parsing incoming TCP message: {}", e),
                         _=>warn!("Unsupported incoming TCP message")

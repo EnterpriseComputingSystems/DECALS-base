@@ -20,17 +20,23 @@ impl Device {
         return newdev;
     }
 
-    pub fn send_data(&self, data: Vec<DataPoint>)->io::Result<()> {
+    pub fn send(&self, data: &[u8])->io::Result<()> {
         match TcpStream::connect(self.addr.clone()) {
             Ok(mut st)=> {
-                for dat in data {
-                    if let Err(e) = st.write_all(protocol::get_set_data(dat).as_bytes()) {
-                        return Err(e);
-                    }
+                if let Err(e) = st.write_all(data) {
+                    return Err(e);
                 }
                 Ok(())
             },
             Err(e)=>Err(e)
         }
+    }
+
+    pub fn send_string(&self, data: String)->io::Result<()> {
+        self.send(data.as_bytes())
+    }
+
+    pub fn send_data(&self, data: Vec<DataPoint>)->io::Result<()> {
+        self.send_string(data.into_iter().map(|dp| {protocol::get_set_data(dp)}).collect())
     }
 }
