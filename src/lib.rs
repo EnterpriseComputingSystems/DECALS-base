@@ -40,7 +40,7 @@ use data::{DataPoint, DataManager, DataReference};
 
 
 const BROADCAST_PORT: u16 = 5320;
-const HEARTBEAT_DELAY: u64 = 3000;
+const HEARTBEAT_DELAY: u64 = 10000;
 
 pub struct Network {
     data: DataManager,
