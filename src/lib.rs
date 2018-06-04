@@ -362,7 +362,7 @@ impl Network {
 
                             let settings_out: String = {
                                 let guard = net.settings.read().unwrap();
-                                (*guard).iter().map(|(key, options)| {protocol::get_register_setting(key.clone(), options)}).collect()
+                                (*guard).iter().map(|(key, options)| {protocol::get_register_setting(key.clone(), options) + "\n"}).collect()
                             };
 
                             if let Err(e) = newdev.send_string(settings_out) {
