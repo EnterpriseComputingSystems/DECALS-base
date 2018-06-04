@@ -353,16 +353,29 @@ impl Network {
 
                             let newdev = Device::new(deviceid, SocketAddr::new(addr.ip(), port), interests);
 
+                            //Update the new device with this device's data
+                            let all_data: Vec<DataPoint> = net.data.get_all_data();
+                            if let Err(e) = newdev.send_data(all_data) {
+                                error!("Error communicating with new device: {:?}", e);
+                                return;
+                            }
+
+                            let settings_out: String = {
+                                let guard = net.settings.read().unwrap();
+                                (*guard).iter().map(|(key, options)| {protocol::get_register_setting(key.clone(), options)}).collect()
+                            };
+
+                            if let Err(e) = newdev.send_string(settings_out) {
+                                error!("Error communicating with new device: {:?}", e);
+                                return;
+                            }
+
                             {
                                 let mut guard = net.devices.write().unwrap();
                                 (*guard).insert(deviceid, newdev);
                             }
 
                             Network::send_event(net, Event::UnitDiscovered(deviceid));
-
-                            //Update the new device with this device's data
-                            let all_data: Vec<DataPoint> = net.data.get_all_data();
-                            Network::broadcast_data(net, all_data);
 
                             info!("device with id {} added", deviceid);
                         }
