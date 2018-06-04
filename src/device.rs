@@ -37,6 +37,6 @@ impl Device {
     }
 
     pub fn send_data(&self, data: Vec<DataPoint>)->io::Result<()> {
-        self.send_string(data.into_iter().map(|dp| {protocol::get_set_data(dp)}  + "\n").collect())
+        self.send_string(data.into_iter().map(|dp| {protocol::get_set_data(dp)}).collect())
     }
 }
